@@ -1,4 +1,4 @@
 #pragma once
 #include "types.hpp"
 
-timepoint_t get_timestamp();
+timestamp_t get_timestamp();

@@ -1,18 +1,13 @@
-#include <signal.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/signalfd.h>
+#include <poll.h>
+#include <string.h>
 
 #include "log.h"
 #include "state_handler.hpp"
 #include "input_listener.hpp"
 #include "utils.hpp"
-
-//logging
-
-/* signal handling */
-static sig_atomic_t abort_signal = 0;
-static void signal_handler(int sig) {
-    abort_signal = 1;
-}
 
 settings_t get_settings() {
     settings_t settings = {};
@@ -24,9 +19,9 @@ settings_t get_settings() {
         "/dev/input/event4",
     };
     settings.inactivity_limit_seconds = 60;
-    settings.battery_current_level = 3.2;
+    settings.battery_voltage_limit = 3.2;
     settings.battery_percentage_limit = 5;
-    settings.battery_monitor_mode = battery_monitor_mode_t::CURRENT;
+    settings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
     settings.net_devices = {
         "wlan0",
     };
@@ -36,17 +31,30 @@ settings_t get_settings() {
     return settings;
 }
 
-activity_log_t get_activity() {
+double get_battery_voltage(const settings_t &settings) {
+    return 4.3;
+}
+
+double get_battery_percentage(const settings_t settings) {
+    return 90.0;
+}
+
+double get_max_net_traffic(const settings_t settings) {
+    return 1000;
+}
+
+activity_log_t get_activity_log(const settings_t &settings) {
     activity_log_t activity = {
         .last_input = get_last_input_event_time(),
-        .battery_current = 4.3,
-        .battery_percentage = 80,
-        .net_traffic_max = 1000,
+        .battery_voltage = get_battery_voltage(settings),
+        .battery_percentage = get_battery_percentage(settings),
+        .net_traffic_max = get_max_net_traffic(settings),
     };
-
-    activity.last_input = get_last_input_event_time();
-
     return activity;
+}
+
+void reset_activity_log(const settings_t &settings) {
+    reset_last_input_event_time();
 }
 
 int handle_transition( const settings_t &settings,
@@ -61,6 +69,8 @@ int handle_transition( const settings_t &settings,
             LOG_INFO("Putting system to sleep using: '%s'",
                     settings.sleep_system_cmd.c_str());
             system(settings.sleep_system_cmd.c_str());
+            // returning from suspend
+            reset_activity_log(settings);
         }
     }
 
@@ -76,16 +86,33 @@ int handle_transition( const settings_t &settings,
 
 int main(int argc, char *argv[]) {
     /* Enable breaking loop */
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGINT);
+    sigaddset(&sigset, SIGTERM);
+    sigprocmask(SIG_BLOCK, &sigset, NULL);
 
+    const int signal_fd = signalfd(-1, &sigset, 0);
     const auto settings = get_settings();
 
     state_t current_state = state_t::ACTIVE;
     start_input_listener(settings);
+
     do {
-        sleep(1);
-        const auto activity = get_activity();
+        struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
+        int r = poll(&fd, 1, 1000);
+
+        // Got signal
+        if (r > 0) {
+            break;
+        }
+
+        if (r < 0) {
+            LOG_ERROR("Main thread poll failed: '%s' (%d).", strerror(errno), errno);
+            break;
+        }
+
+        const auto activity = get_activity_log(settings);
         const auto now = get_timestamp();
         const auto new_state = get_new_state(current_state,
                                              settings,
@@ -96,7 +123,7 @@ int main(int argc, char *argv[]) {
             handle_transition(settings, current_state, new_state);
             current_state = new_state;
         }
-    } while (!abort_signal);
+    } while (true);
 
 
     LOG_INFO("Shutting down application.");

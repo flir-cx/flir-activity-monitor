@@ -24,7 +24,7 @@ struct events_dev {
 };
 
 std::atomic<bool> stop_listening{false};
-std::atomic<timepoint_t> last_input_event_time;
+std::atomic<timestamp_t> last_input_event_time;
 
 std::thread listener_thread;
 
@@ -74,13 +74,13 @@ int start_input_listener(const settings_t &settings) {
         }
         if (nfds == -1) {
             LOG_ERROR("epoll_wait: '%s' (%d)", strerror(errno), errno);
-            return;
+            continue;
         }
         const auto timestamp = get_timestamp();
         last_input_event_time = timestamp;
 
         for (int n = 0; n < nfds; ++n) {
-//            printf("Got event on: %d\n", ep_events[n].data.fd);
+            LOG_DEBUG("Got event on: %d", ep_events[n].data.fd);
             for (const auto dev: devices) {
                 if (dev.fd == ep_events[n].data.fd) {
                     struct input_event ev;
@@ -106,6 +106,10 @@ int stop_input_listener() {
     return 0;
 }
 
-timepoint_t get_last_input_event_time() {
+timestamp_t get_last_input_event_time() {
     return last_input_event_time.load();
+}
+
+void reset_last_input_event_time() {
+    last_input_event_time = get_timestamp();
 }

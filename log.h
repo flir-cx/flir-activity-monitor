@@ -14,6 +14,13 @@
         syslog(LOG_WARNING_LEVEL, __VA_ARGS__); \
     } while(0)
 
+#define LOG_NOTICE_LEVEL 5
+#undef LOG_NOTICE
+#define LOG_NOTICE(...) \
+    do { \
+        syslog(LOG_NOTICE_LEVEL, __VA_ARGS__); \
+    } while(0)
+
 #define LOG_INFO_LEVEL 6
 #undef LOG_INFO
 #define LOG_INFO(...) \
