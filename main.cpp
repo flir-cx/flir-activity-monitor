@@ -1,8 +1,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include <iostream>
-
+#include "log.h"
 #include "state_handler.hpp"
 #include "input_listener.hpp"
 #include "utils.hpp"
@@ -32,7 +31,7 @@ settings_t get_settings() {
         "wlan0",
     };
     settings.sleep_system_cmd = "systemctl suspend";
-    settings.shutdown_system_cmd = "echo SHUTDOWN >> /tmp/activity_monitor";
+    settings.shutdown_system_cmd = "systemctl poweroff";
 
     return settings;
 }
@@ -59,6 +58,8 @@ int handle_transition( const settings_t &settings,
 
     if (new_state == state_t::SLEEP) {
         if (!settings.sleep_system_cmd.empty()) {
+            LOG_INFO("Putting system to sleep using: '%s'",
+                    settings.sleep_system_cmd.c_str());
             system(settings.sleep_system_cmd.c_str());
         }
     }
@@ -98,7 +99,7 @@ int main(int argc, char *argv[]) {
     } while (!abort_signal);
 
 
-    std::cout << "Shutting down application\n";
+    LOG_INFO("Shutting down application.");
 
     stop_input_listener();
 

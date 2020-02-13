@@ -14,6 +14,7 @@
 #include <fcntl.h>
 
 #include "utils.hpp"
+#include "log.h"
 
 namespace {
 
@@ -30,14 +31,6 @@ std::thread listener_thread;
 }
 
 int start_input_listener(const settings_t &settings) {
-//    const char *events[] = {
-//        "/dev/input/event0",
-//        "/dev/input/event1",
-//        "/dev/input/event2",
-//        "/dev/input/event3",
-//        "/dev/input/event4",
-//    };
-//
     listener_thread = std::thread([settings] () {
     const int num_events = settings.input_event_devices.size();
     last_input_event_time = get_timestamp();
@@ -45,27 +38,27 @@ int start_input_listener(const settings_t &settings) {
     auto devices = std::vector<struct events_dev>(num_events);
     int epollfd = epoll_create1(0);
     if (epollfd == -1) {
-        perror("epoll_create1");
+        LOG_ERROR("epoll_create1: '%s' (%d)", strerror(errno), errno);
         return;
     }
 
 
     int i = 0;
     for (const auto e: settings.input_event_devices) {
-        std::cout << "Adding input event: " << e << "\n";
+        LOG_INFO("Adding input event: %s", e.c_str());
         int rc = 1;
         auto &dev = devices[i++];
         dev.fd = open(e.c_str(), O_RDONLY|O_NONBLOCK);
         rc = libevdev_new_from_fd(dev.fd, &dev.dev);
         if (rc < 0) {
-            fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-rc));
+            LOG_ERROR("Failed to init libevdev (%s)\n", strerror(-rc));
             return;
         }
         struct epoll_event ev;
         ev.events = EPOLLIN;
         ev.data.fd = dev.fd;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, dev.fd, &ev) == -1) {
-            perror("epoll_ctl: listen_sock");
+            LOG_ERROR("epoll_ctl: listen_sock: '%s' (%d)", strerror(errno), errno);
             return;
         }
 
@@ -80,7 +73,7 @@ int start_input_listener(const settings_t &settings) {
             continue;
         }
         if (nfds == -1) {
-            perror("epoll_wait");
+            LOG_ERROR("epoll_wait: '%s' (%d)", strerror(errno), errno);
             return;
         }
         const auto timestamp = get_timestamp();
