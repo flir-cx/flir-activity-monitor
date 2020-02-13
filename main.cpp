@@ -1,17 +1,13 @@
+#include <signal.h>
+#include <unistd.h>
+
 #include <iostream>
 
-#include <linux/input.h>
-#include <libevdev/libevdev.h>
-
-#include <unistd.h>
-#include <poll.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <string.h>
-#include <signal.h>
+#include "state_handler.hpp"
+#include "input_listener.hpp"
+#include "utils.hpp"
 
 //logging
-#include <syslog.h>
 
 /* signal handling */
 static sig_atomic_t abort_signal = 0;
@@ -19,100 +15,92 @@ static void signal_handler(int sig) {
     abort_signal = 1;
 }
 
-//static int is_event_device(const struct dirent *dir) {
-//    return strncmp("event", dir->d_name, 5) == 0;
-//}
-//
-//static int open_all_event_devices(struct pollfd *pfds, int npfds) {
-//    struct dirent **event_devices;
-//
-//    int nbr_dev = scandir("/dev/input", &event_devices, is_event_device, alphasort);
-//    if (nbr_dev <= 0) {
-//        syslog(LOG_ERR, "Couldn't find any event devices at all in /dev/input.");
-//        return -1;
-//    }
-//
-//    int pfdi = 0;
-//    for (int i = 0; i < nbr_dev; ++i) {
-//        char full_path[320];
-//        char name[256] = "???";
-//        int fd = -1;
-//
-//        snprintf(full_path, sizeof(full_path), "/dev/input/%s", event_devices[i]->d_name);
-//        if (pfdi >= npfds) {
-//            syslog(LOG_ERR, "Could not add event device '%s' for monitoring, too many devices already added. (limit: %d)",
-//                    full_path, npfds);
-//            continue;
-//        }
-//        fd = open(full_path, O_RDONLY);
-//        if (fd < 0) {
-//            syslog(LOG_ERR, "Failed to open event device '%s' for monitoring (ret: %d, errno: %d).",
-//                    full_path, fd, errno);
-//            free(event_devices[i]);
-//            continue;
-//        }
-//        ioctl(fd, EVIOCGNAME(sizeof(name)), name);
-//        syslog(LOG_INFO, "Adding event device '%s' with name '%s' for monitoring.", full_path, name);
-//        pfds[pfdi].fd = fd;
-//        pfdi++;
-//
-//        free(event_devices[i]);
-//    }
-//
-//    return pfdi;
-//}
+settings_t get_settings() {
+    settings_t settings = {};
+    settings.input_event_devices = {
+        "/dev/input/event0",
+        "/dev/input/event1",
+        "/dev/input/event2",
+        "/dev/input/event3",
+        "/dev/input/event4",
+    };
+    settings.inactivity_limit_seconds = 60;
+    settings.battery_current_level = 3.2;
+    settings.battery_percentage_limit = 5;
+    settings.battery_monitor_mode = battery_monitor_mode_t::CURRENT;
+    settings.net_devices = {
+        "wlan0",
+    };
+    settings.sleep_system_cmd = "systemctl suspend";
+    settings.shutdown_system_cmd = "echo SHUTDOWN >> /tmp/activity_monitor";
+
+    return settings;
+}
+
+activity_log_t get_activity() {
+    activity_log_t activity = {
+        .last_input = get_last_input_event_time(),
+        .battery_current = 4.3,
+        .battery_percentage = 80,
+        .net_traffic_max = 1000,
+    };
+
+    activity.last_input = get_last_input_event_time();
+
+    return activity;
+}
+
+int handle_transition( const settings_t &settings,
+                       const state_t &old_state,
+                       const state_t &new_state ) {
+    if (new_state == old_state) {
+        return 0;
+    }
+
+    if (new_state == state_t::SLEEP) {
+        if (!settings.sleep_system_cmd.empty()) {
+            system(settings.sleep_system_cmd.c_str());
+        }
+    }
+
+    if (new_state == state_t::SHUTDOWN) {
+        if (!settings.shutdown_system_cmd.empty()) {
+            system(settings.shutdown_system_cmd.c_str());
+        }
+    }
+
+    return 0;
+}
+
 
 int main(int argc, char *argv[]) {
     /* Enable breaking loop */
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    struct libevdev *dev = NULL;
-    int rc = 1;
-    int fd = open("/dev/input/event1", O_RDONLY|O_NONBLOCK);
-    rc = libevdev_new_from_fd(fd, &dev);
-    if (rc < 0) {
-        fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-rc));
-        exit(1);
-    }
+    const auto settings = get_settings();
+
+    state_t current_state = state_t::ACTIVE;
+    start_input_listener(settings);
     do {
-        struct input_event ev;
-        rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-        if (rc == 0)
-            printf("Event: %s %s %d\n",
-                    libevdev_event_type_get_name(ev.type),
-                    libevdev_event_code_get_name(ev.type, ev.code),
-                    ev.value);
-    } while ((rc == 1 || rc == 0 || rc == -EAGAIN) && !abort_signal);
+        sleep(1);
+        const auto activity = get_activity();
+        const auto now = get_timestamp();
+        const auto new_state = get_new_state(current_state,
+                                             settings,
+                                             activity,
+                                             now);
+
+        if (new_state != current_state) {
+            handle_transition(settings, current_state, new_state);
+            current_state = new_state;
+        }
+    } while (!abort_signal);
 
 
-//    struct pollfd pfds[16];
-//    int ndevs = open_all_event_devices(pfds, 16);
-//    printf("Opened: %d\n", ndevs);
-//
-//    while(!abort_signal) {
-//        int prc = poll(pfds, ndevs, 50);
-//        if (abort_signal)
-//            break;
-//
-//        /* Got button event */
-//        if (prc > 0) {
-//            for (int evi = 0; evi < ndevs; ++evi) {
-//                //if (pfds[evi].revents & POLLIN) {
-//                if (pfds[evi].revents & ~0x104) {
-//                    printf("Got event: 0x%X\n", pfds[evi].revents);
-//                    if (pfds[evi].revents & POLLIN) {
-//                        struct input_event ev[64];
-//                        int rd = read(pfds[evi].fd, ev, sizeof(ev));
-//                        for (int i = 0; i < rd / sizeof(struct input_event); ++i) {
-//                            printf("Got event, t: %d, c: %d, v: %d\n", ev[i].type, ev[i].code, ev[i].value);
-//                        }
-//                        //pfds[evi].revents &= ~POLLIN;
-//                    }
-//                    pfds[evi].revents = 0;
-//                }
-//            }
-//        }
-//    }
+    std::cout << "Shutting down application\n";
+
+    stop_input_listener();
+
     return 0;
 }

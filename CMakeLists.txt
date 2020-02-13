@@ -4,11 +4,21 @@ project(flir-activity-monitor)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FAM_DEPS REQUIRED libevdev)
 
-set(FAM_SOURCES main.cpp)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+set(FAM_SOURCES
+    main.cpp
+    state_handler.cpp
+    input_listener.cpp
+    utils.cpp
+    )
 
 add_executable(flir-activity-monitor ${FAM_SOURCES})
 target_link_libraries(flir-activity-monitor
-    ${FAM_DEPS_LIBRARIES})
+    ${FAM_DEPS_LIBRARIES}
+    Threads::Threads
+    )
 
 target_include_directories(flir-activity-monitor
     PUBLIC

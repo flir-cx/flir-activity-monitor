@@ -10,6 +10,6 @@ docker run \
     -w "/src" \
     --rm \
     ${DOCKER_IMAGE} \
-    /bin/bash -c "rm -rf test_run && mkdir test_run && cd test_run && cmake .. && make && tests/maf_test"
+    /bin/bash -c "rm -rf test_run && mkdir test_run && cd test_run && cmake .. && make && tests/fam_test"
 
 
