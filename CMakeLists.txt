@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.4)
 project(flir-activity-monitor)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(FAM_DEPS REQUIRED libevdev)
+pkg_check_modules(FAM_DEPS REQUIRED libevdev libudev)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -12,6 +12,7 @@ set(FAM_SOURCES
     state_handler.cpp
     input_listener.cpp
     utils.cpp
+    logger.cpp
     )
 
 add_executable(flir-activity-monitor ${FAM_SOURCES})

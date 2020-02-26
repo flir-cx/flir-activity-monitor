@@ -4,7 +4,7 @@
 int start_input_listener(const settings_t &settings);
 int stop_input_listener();
 
-timestamp_t get_last_input_event_time();
-void reset_last_input_event_time();
+input_event_data_t get_last_input_event_data();
+void reset_last_input_event_data(const settings_t &settings);
 
 

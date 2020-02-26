@@ -11,7 +11,8 @@ TEST(StateHandler, TransitionToSleep) {
 
     settings_t settings = {};
     activity_log_t activity_log = {};
-    activity_log.last_input = now;
+    activity_log.last_input.event_time = now;
+    activity_log.last_input.charger_online = 0;
 
     const auto active_state = get_new_state(current_state, settings, activity_log, now);
     const auto sleep_state = get_new_state(current_state, settings, activity_log, now + 3);

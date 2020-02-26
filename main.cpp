@@ -4,7 +4,7 @@
 #include <poll.h>
 #include <string.h>
 
-#include "log.h"
+#include "log.hpp"
 #include "state_handler.hpp"
 #include "input_listener.hpp"
 #include "utils.hpp"
@@ -27,25 +27,14 @@ settings_t get_settings() {
     };
     settings.sleep_system_cmd = "systemctl suspend";
     settings.shutdown_system_cmd = "systemctl poweroff";
+    settings.charger_name = "pf1550-charger";
 
     return settings;
 }
 
-double get_battery_voltage(const settings_t &settings) {
-    return 4.3;
-}
-
-double get_battery_percentage(const settings_t settings) {
-    return 90.0;
-}
-
-double get_max_net_traffic(const settings_t settings) {
-    return 1000;
-}
-
 activity_log_t get_activity_log(const settings_t &settings) {
     activity_log_t activity = {
-        .last_input = get_last_input_event_time(),
+        .last_input = get_last_input_event_data(),
         .battery_voltage = get_battery_voltage(settings),
         .battery_percentage = get_battery_percentage(settings),
         .net_traffic_max = get_max_net_traffic(settings),
@@ -54,7 +43,7 @@ activity_log_t get_activity_log(const settings_t &settings) {
 }
 
 void reset_activity_log(const settings_t &settings) {
-    reset_last_input_event_time();
+    reset_last_input_event_data(settings);
 }
 
 int handle_transition( const settings_t &settings,
@@ -95,14 +84,18 @@ int main(int argc, char *argv[]) {
     const int signal_fd = signalfd(-1, &sigset, 0);
     const auto settings = get_settings();
 
+    logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
+
     state_t current_state = state_t::ACTIVE;
     start_input_listener(settings);
+
+    int count = 0;
 
     do {
         struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
         int r = poll(&fd, 1, 1000);
 
-        // Got signal
+        // Got signal to stop
         if (r > 0) {
             break;
         }
@@ -115,13 +108,22 @@ int main(int argc, char *argv[]) {
         const auto activity = get_activity_log(settings);
         const auto now = get_timestamp();
         const auto new_state = get_new_state(current_state,
-                                             settings,
-                                             activity,
-                                             now);
+                settings,
+                activity,
+                now);
 
         if (new_state != current_state) {
             handle_transition(settings, current_state, new_state);
             current_state = new_state;
+        }
+
+        if ((count++ % 60) == 0) {
+            LOG_DEBUG("Charger: %s, Idle: %d s, v: %.2f, p: %f, n: %f",
+                    activity.last_input.charger_online ? "ONLINE": "OFFLINE",
+                    now - activity.last_input.event_time,
+                    activity.battery_voltage,
+                    activity.battery_percentage,
+                    activity.net_traffic_max);
         }
     } while (true);
 

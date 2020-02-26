@@ -3,10 +3,15 @@
 #include <vector>
 #include <string>
 
-using timestamp_t = uint64_t;
+using timestamp_t = uint32_t;
 
 typedef struct {
-   timestamp_t last_input;
+    timestamp_t event_time;
+    bool charger_online;
+} input_event_data_t;
+
+typedef struct {
+   input_event_data_t last_input;
    double battery_voltage;
    double battery_percentage;
    double net_traffic_max;
@@ -23,9 +28,11 @@ typedef struct {
     battery_monitor_mode_t battery_monitor_mode;
     double battery_voltage_limit;
     double battery_percentage_limit;
+    double net_activity_limit;
     std::vector<std::string> input_event_devices;
     std::vector<std::string> net_devices;
     int inactivity_limit_seconds;
     std::string sleep_system_cmd;
     std::string shutdown_system_cmd;
+    std::string charger_name;
 } settings_t;
