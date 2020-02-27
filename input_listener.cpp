@@ -119,7 +119,7 @@ int start_input_listener(const settings_t &settings) {
                     activity = true;
                     struct input_event ev;
                     while((rc = libevdev_next_event(dev.dev, LIBEVDEV_READ_FLAG_NORMAL, &ev)) == 0) {
-                        // Empty evdev events
+                        // Empty evdev events for device.
                     }
                 }
             }
@@ -127,7 +127,6 @@ int start_input_listener(const settings_t &settings) {
 
         if (activity) {
             const auto timestamp = get_timestamp();
-            LOG_DEBUG("Activity timestamp: %d", timestamp);
             std::lock_guard<std::mutex> guard(m);
             last_input_event_data.event_time = timestamp;
             if (charger_online_changed) {

@@ -74,63 +74,82 @@ int handle_transition( const settings_t &settings,
 
 
 int main(int argc, char *argv[]) {
-    /* Enable breaking loop */
+    /* Enable breaking and signalling to loop */
     sigset_t sigset;
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGINT);
     sigaddset(&sigset, SIGTERM);
+    sigaddset(&sigset, SIGQUIT);
+    sigaddset(&sigset, SIGHUP);
     sigprocmask(SIG_BLOCK, &sigset, NULL);
 
     const int signal_fd = signalfd(-1, &sigset, 0);
-    const auto settings = get_settings();
 
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
 
     state_t current_state = state_t::ACTIVE;
-    start_input_listener(settings);
 
     int count = 0;
+    bool stop_application = false;
 
     do {
-        struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
-        int r = poll(&fd, 1, 1000);
+        const auto settings = get_settings();
+        start_input_listener(settings);
+        do {
+            struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
+            int r = poll(&fd, 1, 1000);
 
-        // Got signal to stop
-        if (r > 0) {
-            break;
-        }
+            // Got signal
+            if (r > 0) {
+                struct signalfd_siginfo fdsi;
+                read(fd.fd, &fdsi, sizeof(struct signalfd_siginfo));
 
-        if (r < 0) {
-            LOG_ERROR("Main thread poll failed: '%s' (%d).", strerror(errno), errno);
-            break;
-        }
+                switch(fdsi.ssi_signo) {
+                case SIGINT:
+                case SIGTERM:
+                case SIGQUIT:
+                    stop_application = true;
+                    break;
+                default:
+                    // Will break inner loop and reinitialize.
+                    break;
+                }
+                break;
+            }
 
-        const auto activity = get_activity_log(settings);
-        const auto now = get_timestamp();
-        const auto new_state = get_new_state(current_state,
-                settings,
-                activity,
-                now);
+            if (r < 0) {
+                LOG_ERROR("Main thread poll failed: '%s' (%d).", strerror(errno), errno);
+                break;
+            }
 
-        if (new_state != current_state) {
-            handle_transition(settings, current_state, new_state);
-            current_state = new_state;
-        }
+            const auto activity = get_activity_log(settings);
+            const auto now = get_timestamp();
+            const auto new_state = get_new_state(current_state,
+                                                 settings,
+                                                 activity,
+                                                 now);
 
-        if ((count++ % 60) == 0) {
-            LOG_DEBUG("Charger: %s, Idle: %d s, v: %.2f, p: %f, n: %f",
-                    activity.last_input.charger_online ? "ONLINE": "OFFLINE",
-                    now - activity.last_input.event_time,
-                    activity.battery_voltage,
-                    activity.battery_percentage,
-                    activity.net_traffic_max);
-        }
-    } while (true);
+            if (new_state != current_state) {
+                handle_transition(settings, current_state, new_state);
+                current_state = new_state;
+            }
+
+            if ((count++ % 60) == 0) {
+                LOG_DEBUG("Charger: %s, Idle: %d s, v: %.2f, p: %f, n: %f",
+                        activity.last_input.charger_online ? "ONLINE": "OFFLINE",
+                        now - activity.last_input.event_time,
+                        activity.battery_voltage,
+                        activity.battery_percentage,
+                        activity.net_traffic_max);
+            }
+        } while (true);
+
+        stop_input_listener();
+    } while (!stop_application);
 
 
     LOG_INFO("Shutting down application.");
 
-    stop_input_listener();
 
     return 0;
 }
