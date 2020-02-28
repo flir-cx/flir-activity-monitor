@@ -6,31 +6,10 @@
 
 #include "log.hpp"
 #include "state_handler.hpp"
+#include "settings_handler.hpp"
 #include "input_listener.hpp"
 #include "utils.hpp"
 
-settings_t get_settings() {
-    settings_t settings = {};
-    settings.input_event_devices = {
-        "/dev/input/event0",
-        "/dev/input/event1",
-        "/dev/input/event2",
-        "/dev/input/event3",
-        "/dev/input/event4",
-    };
-    settings.inactivity_limit_seconds = 60;
-    settings.battery_voltage_limit = 3.2;
-    settings.battery_percentage_limit = 5;
-    settings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
-    settings.net_devices = {
-        "wlan0",
-    };
-    settings.sleep_system_cmd = "systemctl suspend";
-    settings.shutdown_system_cmd = "systemctl poweroff";
-    settings.charger_name = "pf1550-charger";
-
-    return settings;
-}
 
 activity_log_t get_activity_log(const settings_t &settings) {
     activity_log_t activity = {
@@ -86,6 +65,7 @@ int main(int argc, char *argv[]) {
     const int signal_fd = signalfd(-1, &sigset, 0);
 
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
+    settings_dbus_start_listener();
 
     state_t current_state = state_t::ACTIVE;
 
