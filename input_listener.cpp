@@ -142,7 +142,9 @@ int start_input_listener(const settings_t &settings) {
 
 int stop_input_listener() {
     stop_listening = true;
-    listener_thread.join();
+    if (listener_thread.joinable()) {
+        listener_thread.join();
+    }
     return 0;
 }
 

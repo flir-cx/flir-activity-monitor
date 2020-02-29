@@ -65,7 +65,9 @@ int main(int argc, char *argv[]) {
     const int signal_fd = signalfd(-1, &sigset, 0);
 
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
-    settings_dbus_start_listener();
+    if (settings_dbus_start_listener() < 0) {
+        return EXIT_FAILURE;
+    }
 
     state_t current_state = state_t::ACTIVE;
 
@@ -74,7 +76,10 @@ int main(int argc, char *argv[]) {
 
     do {
         const auto settings = get_settings();
-        start_input_listener(settings);
+
+        if (start_input_listener(settings) < 0) {
+            return EXIT_FAILURE;
+        }
         do {
             struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
             int r = poll(&fd, 1, 1000);
