@@ -37,11 +37,11 @@ settings_t get_settings() {
 
 
 static int method_set_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
-    uint32_t idle_time;
+    int32_t idle_time;
     int32_t ret;
 
     /* Read the parameters */
-    int r = sd_bus_message_read(m, "u", &idle_time);
+    int r = sd_bus_message_read(m, "i", &idle_time);
     if (r < 0) {
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
@@ -53,9 +53,18 @@ static int method_set_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error
     return sd_bus_reply_method_return(m, "i", ret);
 }
 
+static int method_get_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+    int32_t idle_time = 77;
+    LOG_INFO("Returning idle time: %d", idle_time);
+
+    /* Reply with the response */
+    return sd_bus_reply_method_return(m, "i", idle_time);
+}
+
 static const sd_bus_vtable settings_vtable[] = {
     SD_BUS_VTABLE_START(0),
-    SD_BUS_METHOD("SetIdleTimeToSleep", "u", "i", method_set_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("SetIdleTimeToSleep", "i", nullptr, method_set_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("GetIdleTimeToSleep", nullptr, "i", method_get_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_VTABLE_END
 };
 
