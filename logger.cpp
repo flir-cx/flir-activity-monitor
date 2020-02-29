@@ -4,6 +4,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include <cassert>
+
 
 namespace {
     log_level_t g_log_level = log_level_t::INFO;
@@ -29,6 +31,10 @@ namespace {
             case log_level_t::DEBUG:
                 return LOG_DEBUG;
         }
+
+        // Should never be reached.
+        assert(false);
+        return -1;
     }
 };
 
