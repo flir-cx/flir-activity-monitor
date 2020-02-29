@@ -35,4 +35,5 @@ typedef struct {
     std::string sleep_system_cmd;
     std::string shutdown_system_cmd;
     std::string charger_name;
+    std::string battery_name;
 } settings_t;

@@ -30,7 +30,8 @@ settings_t get_settings() {
     };
     settings.sleep_system_cmd = "systemctl suspend";
     settings.shutdown_system_cmd = "systemctl poweroff";
-    settings.charger_name = "pf1550-charger";
+    settings.charger_name = "AC";
+    settings.battery_name = "BAT0";
 
     return settings;
 }

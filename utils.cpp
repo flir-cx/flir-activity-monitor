@@ -28,13 +28,17 @@ timestamp_t get_timestamp() {
 }
 
 double get_battery_voltage(const settings_t &settings) {
-    std::string voltage_file = "/sys/class/power_supply/battery/voltage_now";
+    std::string voltage_file = "/sys/class/power_supply/";
+    voltage_file += settings.battery_name;
+    voltage_file += "/voltage_now";
     int voltage = get_value_from_file(voltage_file, -1000000);
     return double(voltage)/1000000;
 }
 
 double get_battery_percentage(const settings_t &settings) {
-    std::string capacity_file = "/sys/class/power_supply/battery/capacity";
+    std::string capacity_file = "/sys/class/power_supply/";
+    capacity_file += settings.battery_name;
+    capacity_file += "/capacity";
     int capacity = get_value_from_file(capacity_file, -1);
     return capacity;
 }
