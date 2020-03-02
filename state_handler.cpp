@@ -27,12 +27,15 @@ state_t get_new_state(const state_t current_state, const settings_t &settings, c
         }
     }
 
-    if (!activity_log.last_input.charger_online &&
-            activity_log.net_traffic_max < settings.net_activity_limit &&
-            now > (activity_log.last_input.event_time + settings.inactivity_limit_seconds)) {
-        LOG_NOTICE("System is inactive: (inactivity time: %d seconds, net activity: %f), will perform sleep command.",
+    if (settings.sleep_enabled && activity_log.net_traffic_max < settings.net_activity_limit &&
+            ((!activity_log.last_input.charger_online &&
+             now > (activity_log.last_input.event_time + settings.inactive_on_battery_limit)) ||
+             (activity_log.last_input.charger_online &&
+              now > (activity_log.last_input.event_time + settings.inactive_on_charger_limit)))) {
+        LOG_NOTICE("System is inactive: (inactivity time: %d seconds, net activity: %f, charger: %d), will perform sleep command.",
                 (now - activity_log.last_input.event_time),
-                activity_log.net_traffic_max);
+                activity_log.net_traffic_max,
+                activity_log.last_input.charger_online);
         return state_t::SLEEP;
     }
 

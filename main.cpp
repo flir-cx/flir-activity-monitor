@@ -65,7 +65,10 @@ int main(int argc, char *argv[]) {
     const int signal_fd = signalfd(-1, &sigset, 0);
 
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
-    if (settings_dbus_start_listener() < 0) {
+
+    SettingsHandler settings_handler;
+
+    if (!settings_handler.startDbusThread()) {
         return EXIT_FAILURE;
     }
 
@@ -75,7 +78,11 @@ int main(int argc, char *argv[]) {
     bool stop_application = false;
 
     do {
-        const auto settings = get_settings();
+
+        if (!settings_handler.generateSettings()) {
+            return EXIT_FAILURE;
+        }
+        const auto settings = settings_handler.getSettings();
 
         if (start_input_listener(settings) < 0) {
             return EXIT_FAILURE;

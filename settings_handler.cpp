@@ -1,44 +1,20 @@
 #include "settings_handler.hpp"
 
-#include <thread>
+#include <sstream>
 
 #include <systemd/sd-bus.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "log.hpp"
 
 namespace {
-    std::thread dbus_thread;
-}
-
-settings_t get_settings() {
-    settings_t settings = {};
-    settings.input_event_devices = {
-        "/dev/input/event0",
-        "/dev/input/event1",
-        "/dev/input/event2",
-        "/dev/input/event3",
-        "/dev/input/event4",
-    };
-    settings.inactivity_limit_seconds = 60;
-    settings.battery_voltage_limit = 3.2;
-    settings.battery_percentage_limit = 5;
-    settings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
-    settings.net_devices = {
-        "wlan0",
-    };
-    settings.sleep_system_cmd = "systemctl suspend";
-    settings.shutdown_system_cmd = "systemctl poweroff";
-    settings.charger_name = "AC";
-    settings.battery_name = "BAT0";
-
-    return settings;
-}
-
 
 static int method_set_on_battery_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
     int32_t idle_time;
+    std::stringstream ss;
+    auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
 
     /* Read the parameters */
     int r = sd_bus_message_read(m, "i", &idle_time);
@@ -46,23 +22,27 @@ static int method_set_on_battery_idle_limit(sd_bus_message *m, void *userdata, s
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
     }
-
-    LOG_INFO("New on battery idle time: %d", idle_time);
+    ss << idle_time;
+    settings_handler->addDbusSetting(settings_field::INACT_ON_BAT_LIMIT, ss.str());
+    // Trigger rereading of settings
+    kill(getpid(), SIGHUP);
 
     /* Reply with the response */
     return sd_bus_reply_method_return(m, nullptr);
 }
 
 static int method_get_on_battery_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
-    int32_t idle_time = 77;
-    LOG_INFO("Returning on battery idle time: %d", idle_time);
+    const auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
+    const auto settings = settings_handler->getSettings();
 
     /* Reply with the response */
-    return sd_bus_reply_method_return(m, "i", idle_time);
+    return sd_bus_reply_method_return(m, "i", settings.inactive_on_battery_limit);
 }
 
 static int method_set_on_charger_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
     int32_t idle_time;
+    std::stringstream ss;
+    auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
 
     /* Read the parameters */
     int r = sd_bus_message_read(m, "i", &idle_time);
@@ -70,23 +50,26 @@ static int method_set_on_charger_idle_limit(sd_bus_message *m, void *userdata, s
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
     }
-
-    LOG_INFO("New on charger idle time: %d", idle_time);
+    ss << idle_time;
+    settings_handler->addDbusSetting(settings_field::INACT_ON_CHARGER_LIMIT, ss.str());
+    // Trigger rereading of settings
+    kill(getpid(), SIGHUP);
 
     /* Reply with the response */
     return sd_bus_reply_method_return(m, nullptr);
 }
 
 static int method_get_on_charger_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
-    int32_t idle_time = 88;
-    LOG_INFO("Returning on charger idle time: %d", idle_time);
+    const auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
+    const auto settings = settings_handler->getSettings();
 
     /* Reply with the response */
-    return sd_bus_reply_method_return(m, "i", idle_time);
+    return sd_bus_reply_method_return(m, "i", settings.inactive_on_charger_limit);
 }
 
 static int method_set_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
     int32_t enabled;
+    auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
 
     /* Read the parameters */
     int r = sd_bus_message_read(m, "b", &enabled);
@@ -94,19 +77,20 @@ static int method_set_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_er
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
     }
-
-    LOG_INFO("New sleep enabled: %d", enabled);
+    settings_handler->addDbusSetting(settings_field::ENABLED_SLEEP, enabled?"true":"false");
+    // Trigger rereading of settings
+    kill(getpid(), SIGHUP);
 
     /* Reply with the response */
     return sd_bus_reply_method_return(m, nullptr);
 }
 
 static int method_get_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
-    int32_t enabled = 1;
-    LOG_INFO("Returning sleep enabled: %d", enabled);
+    const auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
+    const auto settings = settings_handler->getSettings();
 
     /* Reply with the response */
-    return sd_bus_reply_method_return(m, "b", enabled);
+    return sd_bus_reply_method_return(m, "b", settings.sleep_enabled?1:0);
 }
 
 static const sd_bus_vtable settings_vtable[] = {
@@ -119,8 +103,48 @@ static const sd_bus_vtable settings_vtable[] = {
     SD_BUS_METHOD("GetSleepEnabled", nullptr, "b", method_get_sleep_enabled, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_VTABLE_END
 };
+};
 
-int settings_dbus_start_listener() {
+SettingsHandler::SettingsHandler()
+{
+}
+
+SettingsHandler::~SettingsHandler()
+{
+}
+
+
+settings_t
+SettingsHandler::getSettings() const {
+    LOG_INFO("Getting settings");
+    settings_t settings = {};
+    settings.input_event_devices = {
+        "/dev/input/event0",
+        "/dev/input/event1",
+        "/dev/input/event2",
+        "/dev/input/event3",
+        "/dev/input/event4",
+    };
+    settings.inactive_on_battery_limit = 60;
+    settings.inactive_on_charger_limit = 60*20;
+    settings.battery_voltage_limit = 3.2;
+    settings.battery_percentage_limit = 5;
+    settings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
+    settings.net_devices = {
+        "wlan0",
+    };
+    settings.sleep_system_cmd = "systemctl suspend";
+    settings.shutdown_system_cmd = "systemctl poweroff";
+    settings.charger_name = "AC";
+    settings.battery_name = "BAT0";
+    settings.sleep_enabled = true;
+
+    return settings;
+}
+
+
+bool
+SettingsHandler::startDbusThread() {
     sd_bus_slot *slot = NULL;
     sd_bus *bus = NULL;
     int r;
@@ -129,7 +153,7 @@ int settings_dbus_start_listener() {
     if (r < 0) {
         LOG_ERROR("Failed to connect to system bus: %s", strerror(-r));
         sd_bus_unref(bus);
-        return r;
+        return false;
     }
 
     /* Install the object */
@@ -138,13 +162,13 @@ int settings_dbus_start_listener() {
             "/com/flir/activitymonitor",  /* object path */
             "com.flir.activitymonitor",   /* interface name */
             settings_vtable,
-            NULL);
+            this);
 
     if (r < 0) {
         LOG_ERROR("Failed to issue method call: %s", strerror(-r));
         sd_bus_slot_unref(slot);
         sd_bus_unref(bus);
-        return r;
+        return false;
     }
 
     /* Take a well-known service name so that clients can find us */
@@ -153,11 +177,11 @@ int settings_dbus_start_listener() {
         LOG_ERROR("Failed to acquire service name: %s", strerror(-r));
         sd_bus_slot_unref(slot);
         sd_bus_unref(bus);
-        return r;
+        return false;
     }
 
 
-    dbus_thread = std::thread([bus, slot]() {
+    mDbusThread = std::thread([bus, slot]() {
         for (;;) {
             /* Process requests */
             int r = sd_bus_process(bus, NULL);
@@ -178,5 +202,19 @@ int settings_dbus_start_listener() {
         sd_bus_unref(bus);
     });
 
-    return 0;
+    return true;
+}
+
+bool
+SettingsHandler::generateSettings()
+{
+    LOG_INFO("Generating settings");
+    return true;
+}
+
+void
+SettingsHandler::addDbusSetting(settings_field field, const std::string &content)
+{
+    LOG_INFO("ADDING DBUS SETTING: %s", content.c_str());
+    mDbusSettings[field] = content;
 }

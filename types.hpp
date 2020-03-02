@@ -31,7 +31,9 @@ typedef struct {
     double net_activity_limit;
     std::vector<std::string> input_event_devices;
     std::vector<std::string> net_devices;
-    int inactivity_limit_seconds;
+    int inactive_on_battery_limit;
+    int inactive_on_charger_limit;
+    bool sleep_enabled;
     std::string sleep_system_cmd;
     std::string shutdown_system_cmd;
     std::string charger_name;
