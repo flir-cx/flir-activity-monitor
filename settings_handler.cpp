@@ -37,9 +37,8 @@ settings_t get_settings() {
 }
 
 
-static int method_set_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+static int method_set_on_battery_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
     int32_t idle_time;
-    int32_t ret;
 
     /* Read the parameters */
     int r = sd_bus_message_read(m, "i", &idle_time);
@@ -48,24 +47,76 @@ static int method_set_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error
         return r;
     }
 
-    LOG_INFO("New idle time: %d", idle_time);
+    LOG_INFO("New on battery idle time: %d", idle_time);
 
     /* Reply with the response */
-    return sd_bus_reply_method_return(m, "i", ret);
+    return sd_bus_reply_method_return(m, nullptr);
 }
 
-static int method_get_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+static int method_get_on_battery_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
     int32_t idle_time = 77;
-    LOG_INFO("Returning idle time: %d", idle_time);
+    LOG_INFO("Returning on battery idle time: %d", idle_time);
 
     /* Reply with the response */
     return sd_bus_reply_method_return(m, "i", idle_time);
 }
 
+static int method_set_on_charger_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+    int32_t idle_time;
+
+    /* Read the parameters */
+    int r = sd_bus_message_read(m, "i", &idle_time);
+    if (r < 0) {
+        LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
+        return r;
+    }
+
+    LOG_INFO("New on charger idle time: %d", idle_time);
+
+    /* Reply with the response */
+    return sd_bus_reply_method_return(m, nullptr);
+}
+
+static int method_get_on_charger_idle_limit(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+    int32_t idle_time = 88;
+    LOG_INFO("Returning on charger idle time: %d", idle_time);
+
+    /* Reply with the response */
+    return sd_bus_reply_method_return(m, "i", idle_time);
+}
+
+static int method_set_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+    int32_t enabled;
+
+    /* Read the parameters */
+    int r = sd_bus_message_read(m, "b", &enabled);
+    if (r < 0) {
+        LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
+        return r;
+    }
+
+    LOG_INFO("New sleep enabled: %d", enabled);
+
+    /* Reply with the response */
+    return sd_bus_reply_method_return(m, nullptr);
+}
+
+static int method_get_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+    int32_t enabled = 1;
+    LOG_INFO("Returning sleep enabled: %d", enabled);
+
+    /* Reply with the response */
+    return sd_bus_reply_method_return(m, "b", enabled);
+}
+
 static const sd_bus_vtable settings_vtable[] = {
     SD_BUS_VTABLE_START(0),
-    SD_BUS_METHOD("SetIdleTimeToSleep", "i", nullptr, method_set_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
-    SD_BUS_METHOD("GetIdleTimeToSleep", nullptr, "i", method_get_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("SetOnBatteryTimeToSleep", "i", nullptr, method_set_on_battery_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("GetOnBatteryTimeToSleep", nullptr, "i", method_get_on_battery_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("SetOnACTimeToSleep", "i", nullptr, method_set_on_charger_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("GetOnACTimeToSleep", nullptr, "i", method_get_on_charger_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("SetSleepEnabled", "b", nullptr, method_set_sleep_enabled, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("GetSleepEnabled", nullptr, "b", method_get_sleep_enabled, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_VTABLE_END
 };
 
