@@ -51,7 +51,3 @@ bool get_charger_online(const settings_t &settings) {
 
     return online == 1;
 }
-
-double get_max_net_traffic(const settings_t settings) {
-    return 1000;
-}

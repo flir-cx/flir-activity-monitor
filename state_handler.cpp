@@ -28,9 +28,9 @@ state_t get_new_state(const state_t current_state, const settings_t &settings, c
     }
 
     if (settings.sleep_enabled && activity_log.net_traffic_max < settings.net_activity_limit &&
-            ((!activity_log.last_input.charger_online &&
+            ((!activity_log.last_input.charger_online && settings.inactive_on_battery_limit > 0 &&
              now > (activity_log.last_input.event_time + settings.inactive_on_battery_limit)) ||
-             (activity_log.last_input.charger_online &&
+             (activity_log.last_input.charger_online && settings.inactive_on_charger_limit > 0 &&
               now > (activity_log.last_input.event_time + settings.inactive_on_charger_limit)))) {
         LOG_NOTICE("System is inactive: (inactivity time: %d seconds, net activity: %f, charger: %d), will perform sleep command.",
                 (now - activity_log.last_input.event_time),

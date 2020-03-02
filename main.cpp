@@ -8,6 +8,7 @@
 #include "state_handler.hpp"
 #include "settings_handler.hpp"
 #include "input_listener.hpp"
+#include "network_monitor.hpp"
 #include "utils.hpp"
 
 
@@ -16,7 +17,7 @@ activity_log_t get_activity_log(const settings_t &settings) {
         .last_input = get_last_input_event_data(),
         .battery_voltage = get_battery_voltage(settings),
         .battery_percentage = get_battery_percentage(settings),
-        .net_traffic_max = get_max_net_traffic(settings),
+        .net_traffic_max = get_max_net_activity(),
     };
     return activity;
 }
@@ -87,6 +88,10 @@ int main(int argc, char *argv[]) {
         if (start_input_listener(settings) < 0) {
             return EXIT_FAILURE;
         }
+        if (start_network_monitor(settings) < 0) {
+            return EXIT_FAILURE;
+        }
+
         do {
             struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
             int r = poll(&fd, 1, 1000);
@@ -135,8 +140,8 @@ int main(int argc, char *argv[]) {
                         activity.net_traffic_max);
             }
         } while (true);
-
         stop_input_listener();
+        stop_network_monitor();
     } while (!stop_application);
 
 

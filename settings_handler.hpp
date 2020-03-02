@@ -27,7 +27,7 @@ public:
     SettingsHandler();
     ~SettingsHandler();
 
-    settings_t getSettings() const;
+    settings_t getSettings();
     bool generateSettings();
     bool startDbusThread();
 
@@ -36,6 +36,8 @@ public:
 private:
     std::mutex mMutex;
     std::thread mDbusThread;
+    settings_t mDefaultSettings;
+    settings_t mSettings;
     int mPollFD;
     int mAbortFD;
     std::unordered_map<settings_field, std::string> mDbusSettings;

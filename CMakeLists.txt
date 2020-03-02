@@ -12,6 +12,7 @@ set(FAM_SOURCES
     state_handler.cpp
     settings_handler.cpp
     input_listener.cpp
+    network_monitor.cpp
     utils.cpp
     logger.cpp
     )
