@@ -146,8 +146,8 @@ SettingsHandler::getSettings() const {
     };
     settings.sleep_system_cmd = "systemctl suspend";
     settings.shutdown_system_cmd = "systemctl poweroff";
-    settings.charger_name = "AC";
-    settings.battery_name = "BAT0";
+    settings.charger_name = "pf1550-charger";
+    settings.battery_name = "battery";
     settings.sleep_enabled = true;
 
     return settings;
