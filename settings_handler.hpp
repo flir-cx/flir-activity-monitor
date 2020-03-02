@@ -36,6 +36,8 @@ public:
 private:
     std::mutex mMutex;
     std::thread mDbusThread;
+    int mPollFD;
+    int mAbortFD;
     std::unordered_map<settings_field, std::string> mDbusSettings;
     std::unordered_map<settings_field, std::string> mConfigFilesettings;
 };

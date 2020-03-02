@@ -6,6 +6,7 @@
 
 #include <unistd.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <linux/input.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
@@ -25,11 +26,11 @@ struct events_dev {
     struct libevdev *dev;
 };
 
-std::atomic<bool> stop_listening{false};
 input_event_data_t last_input_event_data;
 std::mutex m;
-
 std::thread listener_thread;
+
+int abortfd = -1;
 
 }
 
@@ -42,18 +43,25 @@ int start_input_listener(const settings_t &settings) {
         return -1;
     }
 
-	/* create udev object */
-	auto udev = udev_new();
-	if (!udev) {
-		fprintf(stderr, "Can't create udev\n");
-		return 1;
-	}
-
-	auto mon = udev_monitor_new_from_netlink(udev, "udev");
-	udev_monitor_filter_add_match_subsystem_devtype(mon, "power_supply", NULL);
-	udev_monitor_enable_receiving(mon);
-	int udev_fd = udev_monitor_get_fd(mon);
     struct epoll_event ev;
+    abortfd = eventfd(0, 0);
+    ev.events = EPOLLIN;
+    ev.data.fd = abortfd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, abortfd, &ev) == -1) {
+        LOG_ERROR("epoll_ctl: abort fd: '%s' (%d)", strerror(errno), errno);
+        return false;
+    }
+    /* create udev object */
+    auto udev = udev_new();
+    if (!udev) {
+        fprintf(stderr, "Can't create udev\n");
+        return 1;
+    }
+
+    auto mon = udev_monitor_new_from_netlink(udev, "udev");
+    udev_monitor_filter_add_match_subsystem_devtype(mon, "power_supply", NULL);
+    udev_monitor_enable_receiving(mon);
+    int udev_fd = udev_monitor_get_fd(mon);
     ev.events = EPOLLIN;
     ev.data.fd = udev_fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, udev_fd, &ev) == -1) {
@@ -86,12 +94,13 @@ int start_input_listener(const settings_t &settings) {
 
     listener_thread = std::thread([settings, udev_fd, epollfd, num_events, devices, mon] () {
     int rc = 1;
+    bool stop_thread = false;
     do {
         bool charger_online = false;
         bool charger_online_changed = false;
         bool activity = false;
         struct epoll_event ep_events[num_events];
-        int nfds = epoll_wait(epollfd, ep_events, num_events, 50);
+        int nfds = epoll_wait(epollfd, ep_events, num_events, -1);
         if (nfds == 0) {
             continue;
         }
@@ -101,6 +110,10 @@ int start_input_listener(const settings_t &settings) {
         }
 
         for (int n = 0; n < nfds; ++n) {
+            if (ep_events[n].data.fd == abortfd) {
+                stop_thread = true;
+                break;
+            }
             if (ep_events[n].data.fd == udev_fd) {
                 const auto ps = udev_monitor_receive_device(mon);
                 std::string device_name = udev_device_get_sysname(ps);
@@ -125,6 +138,10 @@ int start_input_listener(const settings_t &settings) {
             }
         }
 
+        if (stop_thread) {
+            break;
+        }
+
         if (activity) {
             const auto timestamp = get_timestamp();
             std::lock_guard<std::mutex> guard(m);
@@ -133,7 +150,7 @@ int start_input_listener(const settings_t &settings) {
                 last_input_event_data.charger_online = charger_online;
             }
         }
-    } while (!stop_listening);
+    } while (true);
     }
     );
 
@@ -141,9 +158,12 @@ int start_input_listener(const settings_t &settings) {
 }
 
 int stop_input_listener() {
-    stop_listening = true;
-    if (listener_thread.joinable()) {
-        listener_thread.join();
+    if (abortfd >= 0) {
+        uint64_t v = 1;
+        write(abortfd, &v, sizeof(v));
+        if (listener_thread.joinable()) {
+            listener_thread.join();
+        }
     }
     return 0;
 }

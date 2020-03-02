@@ -6,6 +6,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/eventfd.h>
+#include <sys/epoll.h>
 
 #include "log.hpp"
 
@@ -106,11 +108,20 @@ static const sd_bus_vtable settings_vtable[] = {
 };
 
 SettingsHandler::SettingsHandler()
+: mPollFD(-1)
+, mAbortFD(-1)
 {
 }
 
 SettingsHandler::~SettingsHandler()
 {
+    if (mAbortFD >= 0) {
+        uint64_t v = 1;
+        write(mAbortFD, &v, sizeof(v));
+        if (mDbusThread.joinable()) {
+            mDbusThread.join();
+        }
+    }
 }
 
 
@@ -180,22 +191,52 @@ SettingsHandler::startDbusThread() {
         return false;
     }
 
+    mPollFD = epoll_create1(0);
+    struct epoll_event ev;
+    mAbortFD = eventfd(0, 0);
+    ev.events = EPOLLIN;
+    ev.data.fd = mAbortFD;
+    if (epoll_ctl(mPollFD, EPOLL_CTL_ADD, mAbortFD, &ev) == -1) {
+        LOG_ERROR("epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
+        return false;
+    }
+    int bus_fd = sd_bus_get_fd(bus);
+    ev.events = sd_bus_get_events(bus);
+    ev.data.fd = bus_fd;
+    if (epoll_ctl(mPollFD, EPOLL_CTL_ADD, bus_fd, &ev) == -1) {
+        LOG_ERROR("epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
+        return false;
+    }
+    uint64_t wait_usec;
+    sd_bus_get_timeout(bus, &wait_usec);
+    int wait = (wait_usec == uint64_t(-1))?-1:(wait_usec * 999)/1000;
 
-    mDbusThread = std::thread([bus, slot]() {
+    mDbusThread = std::thread([bus, slot, wait, abortfd = mAbortFD, epollfd = mPollFD]()
+    {
+        bool stop_thread = false;
         for (;;) {
+            struct epoll_event ep_events[2];
+            int nfds = epoll_wait(epollfd, ep_events, 2, wait);
+            if (nfds == -1) {
+                LOG_ERROR("epoll_wait: '%s' (%d)", strerror(errno), errno);
+                continue;
+            }
+            for (int n = 0; n < nfds; ++n) {
+                if (ep_events[n].data.fd == abortfd) {
+                    stop_thread = true;
+                    break;
+                }
+            }
+            if (stop_thread) {
+                break;
+            }
+
             /* Process requests */
-            int r = sd_bus_process(bus, NULL);
+            int r = 0;
+            while((r = sd_bus_process(bus, NULL)) > 0);
+
             if (r < 0) {
                 LOG_ERROR("Failed to process bus: %s", strerror(-r));
-            }
-            if (r > 0) /* we processed a request, try to process another one, right-away */
-                continue;
-
-            /* Wait for the next request to process */
-            r = sd_bus_wait(bus, (uint64_t) -1);
-            if (r < 0) {
-                LOG_ERROR("Failed to wait on bus: %s", strerror(-r));
-                continue;
             }
         }
         sd_bus_slot_unref(slot);
