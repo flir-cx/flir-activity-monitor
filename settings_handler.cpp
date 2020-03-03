@@ -120,8 +120,8 @@ SettingsHandler::SettingsHandler()
         "/dev/input/event3",
         "/dev/input/event4",
     };
-    mDefaultSettings.inactive_on_battery_limit = 20 * 60;
-    mDefaultSettings.inactive_on_charger_limit = 20 * 60;
+    mDefaultSettings.inactive_on_battery_limit = 0;
+    mDefaultSettings.inactive_on_charger_limit = 0;
     mDefaultSettings.battery_voltage_limit = 3.2;
     mDefaultSettings.battery_percentage_limit = 5;
     mDefaultSettings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
