@@ -154,7 +154,7 @@ SettingsHandler::~SettingsHandler()
 
 settings_t
 SettingsHandler::getSettings() {
-    LOG_INFO("Getting settings");
+    LOG_DEBUG("Getting settings");
     std::lock_guard<std::mutex> l(mMutex);
     return mSettings;
 }
@@ -255,7 +255,7 @@ SettingsHandler::startDbusThread() {
 bool
 SettingsHandler::generateSettings()
 {
-    LOG_INFO("Generating settings");
+    LOG_DEBUG("Generating settings");
     std::lock_guard<std::mutex> l(mMutex);
     for (const auto &f :mDbusSettings) {
         switch (f.first) {
@@ -295,6 +295,9 @@ SettingsHandler::generateSettings()
                 mSettings.sleep_enabled = enabled;
             }
             break;
+
+            default:
+                LOG_ERROR("Generate settings, settings field not handled.");
         }
     }
 
