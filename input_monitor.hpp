@@ -5,13 +5,14 @@
 #include <vector>
 
 #include "types.hpp"
+#include "rolling_window.hpp"
 
 
-class NetworkMonitor {
+class InputMonitor {
 public:
-    explicit NetworkMonitor(const settings_t &settings);
-    ~NetworkMonitor();
-    network_status_t getStatus();
+    explicit InputMonitor(const settings_t &settings);
+    ~InputMonitor();
+    input_status_t getStatus();
     bool start();
     void reset();
 
@@ -19,6 +20,6 @@ private:
     settings_t mSettings;
     std::mutex mMutex;
     std::thread mThread;
-    double mLastMaxTraffic;
     int mAbortFD;
+    input_status_t mLastInputData;
 };

@@ -123,7 +123,7 @@ SettingsHandler::SettingsHandler()
     mDefaultSettings.inactive_on_battery_limit = 0;
     mDefaultSettings.inactive_on_charger_limit = 0;
     mDefaultSettings.battery_voltage_limit = 3.2;
-    mDefaultSettings.battery_percentage_limit = 5;
+    mDefaultSettings.battery_capacity_limit = 5;
     mDefaultSettings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
     mDefaultSettings.net_activity_limit = 100;
     mDefaultSettings.net_devices = {
@@ -168,7 +168,7 @@ SettingsHandler::startDbusThread() {
 
     r = sd_bus_open_system(&bus);
     if (r < 0) {
-        LOG_ERROR("Failed to connect to system bus: %s", strerror(-r));
+        LOG_ERROR("settings: Failed to connect to system bus: %s", strerror(-r));
         sd_bus_unref(bus);
         return false;
     }
@@ -182,7 +182,7 @@ SettingsHandler::startDbusThread() {
             this);
 
     if (r < 0) {
-        LOG_ERROR("Failed to issue method call: %s", strerror(-r));
+        LOG_ERROR("settings: Failed to issue method call: %s", strerror(-r));
         sd_bus_slot_unref(slot);
         sd_bus_unref(bus);
         return false;
@@ -191,7 +191,7 @@ SettingsHandler::startDbusThread() {
     /* Take a well-known service name so that clients can find us */
     r = sd_bus_request_name(bus, "com.flir.activitymonitor", 0);
     if (r < 0) {
-        LOG_ERROR("Failed to acquire service name: %s", strerror(-r));
+        LOG_ERROR("settings: Failed to acquire service name: %s", strerror(-r));
         sd_bus_slot_unref(slot);
         sd_bus_unref(bus);
         return false;
@@ -203,14 +203,14 @@ SettingsHandler::startDbusThread() {
     ev.events = EPOLLIN;
     ev.data.fd = mAbortFD;
     if (epoll_ctl(mPollFD, EPOLL_CTL_ADD, mAbortFD, &ev) == -1) {
-        LOG_ERROR("epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
+        LOG_ERROR("settings: epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
         return false;
     }
     int bus_fd = sd_bus_get_fd(bus);
     ev.events = EPOLLIN;
     ev.data.fd = bus_fd;
     if (epoll_ctl(mPollFD, EPOLL_CTL_ADD, bus_fd, &ev) == -1) {
-        LOG_ERROR("epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
+        LOG_ERROR("settings: epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
         return false;
     }
     //uint64_t wait_usec;
@@ -224,7 +224,9 @@ SettingsHandler::startDbusThread() {
             struct epoll_event ep_events[2];
             int nfds = epoll_wait(epollfd, ep_events, 2, -1);
             if (nfds == -1) {
-                LOG_ERROR("epoll_wait: '%s' (%d)", strerror(errno), errno);
+                if (errno != EINTR) {
+                    LOG_ERROR("settings: epoll_wait: '%s' (%d)", strerror(errno), errno);
+                }
                 continue;
             }
             for (int n = 0; n < nfds; ++n) {
@@ -242,7 +244,7 @@ SettingsHandler::startDbusThread() {
             while((r = sd_bus_process(bus, NULL)) > 0);
 
             if (r < 0) {
-                LOG_ERROR("Failed to process bus: %s", strerror(-r));
+                LOG_ERROR("settings: Failed to process bus: %s", strerror(-r));
             }
         }
         sd_bus_slot_unref(slot);

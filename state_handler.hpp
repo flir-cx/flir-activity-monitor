@@ -9,5 +9,5 @@ typedef enum class state {
 
 state_t get_new_state(const state_t current_state,
         const settings_t &settings,
-        const activity_log_t &activity_log,
+        const status_t &status,
         const timestamp_t &now);

@@ -10,12 +10,15 @@ TEST(StateHandler, TransitionToSleep) {
     const auto now = get_timestamp();
 
     settings_t settings = {};
-    activity_log_t activity_log = {};
-    activity_log.last_input.event_time = now;
-    activity_log.last_input.charger_online = 0;
+    settings.sleep_enabled = true;
+    settings.inactive_on_battery_limit = 60;
+    settings.net_activity_limit = 100;
+    status_t status = {};
+    status.input.event_time = now;
+    status.input.charger_online = 0;
 
-    const auto active_state = get_new_state(current_state, settings, activity_log, now);
-    const auto sleep_state = get_new_state(current_state, settings, activity_log, now + 3);
+    const auto active_state = get_new_state(current_state, settings, status, now);
+    const auto sleep_state = get_new_state(current_state, settings, status, now + 61);
 
     EXPECT_EQ(active_state, state_t::ACTIVE);
     EXPECT_EQ(sleep_state, state_t::SLEEP);

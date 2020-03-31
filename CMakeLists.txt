@@ -11,8 +11,9 @@ set(FAM_SOURCES
     main.cpp
     state_handler.cpp
     settings_handler.cpp
-    input_listener.cpp
+    input_monitor.cpp
     network_monitor.cpp
+    battery_monitor.cpp
     utils.cpp
     logger.cpp
     )

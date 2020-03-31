@@ -1,4 +1,5 @@
-#include "input_listener.hpp"
+#include "network_monitor.hpp"
+
 #include <algorithm>
 #include <memory>
 #include <atomic>
@@ -18,12 +19,7 @@
 
 namespace {
 
-std::mutex m;
-std::thread monitor_thread;
 double max_net_activity;
-
-int abortfd = -1;
-
 
 std::vector<uint64_t> get_net_stat(const settings_t &settings, const std::string &stats_file) {
     std::vector<uint64_t> data(settings.net_devices.size());
@@ -57,66 +53,78 @@ uint64_t max_net_stat(std::vector<uint64_t> prev_tx, std::vector<uint64_t> prev_
 }
 };
 
-int start_network_monitor(const settings_t &settings) {
+bool
+NetworkMonitor::start() {
     int epollfd = epoll_create1(0);
     if (epollfd == -1) {
-        LOG_ERROR("epoll_create1: '%s' (%d)", strerror(errno), errno);
-        return -1;
+        LOG_ERROR("net_mon: epoll_create1: '%s' (%d)", strerror(errno), errno);
+        return false;
     }
 
     struct epoll_event ev;
-    abortfd = eventfd(0, 0);
+    mAbortFD = eventfd(0, 0);
     ev.events = EPOLLIN;
-    ev.data.fd = abortfd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, abortfd, &ev) == -1) {
-        LOG_ERROR("epoll_ctl: abort fd: '%s' (%d)", strerror(errno), errno);
+    ev.data.fd = mAbortFD;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, mAbortFD, &ev) == -1) {
+        LOG_ERROR("net_mon: epoll_ctl: abort fd: '%s' (%d)", strerror(errno), errno);
         return false;
     }
 
 
-    monitor_thread = std::thread([settings, epollfd] () {
-    auto prev_tx_data = get_net_stat(settings, "tx_packets");
-    auto prev_rx_data = get_net_stat(settings, "rx_packets");
+    mThread = std::thread([this, epollfd] () {
+    auto prev_tx_data = get_net_stat(mSettings, "tx_packets");
+    auto prev_rx_data = get_net_stat(mSettings, "rx_packets");
     do {
         struct epoll_event ep_event;
         int nfds = epoll_wait(epollfd, &ep_event, 1, 10*1000);
         if (nfds == -1) {
-            LOG_ERROR("epoll_wait: '%s' (%d)", strerror(errno), errno);
+            if (errno != EINTR) {
+                LOG_ERROR("net_mon: epoll_wait: '%s' (%d)", strerror(errno), errno);
+            }
             continue;
         }
         if (nfds > 0) {
             break;
         }
 
-        auto curr_tx_data = get_net_stat(settings, "tx_packets");
-        auto curr_rx_data = get_net_stat(settings, "rx_packets");
+        auto curr_tx_data = get_net_stat(mSettings, "tx_packets");
+        auto curr_rx_data = get_net_stat(mSettings, "rx_packets");
         uint64_t max_net = max_net_stat(prev_tx_data, prev_rx_data, curr_tx_data, curr_rx_data);
 
         std::swap(prev_tx_data, curr_tx_data);
         std::swap(prev_rx_data, curr_rx_data);
 
-        std::lock_guard<std::mutex> guard(m);
-        max_net_activity = double(max_net)/10;
+        std::lock_guard<std::mutex> guard(mMutex);
+        mLastMaxTraffic = double(max_net)/10;
 
     } while (true);
     }
     );
 
-    return 0;
-}
-
-bool stop_network_monitor() {
-    if (abortfd >= 0) {
-        uint64_t v = 1;
-        write(abortfd, &v, sizeof(v));
-        if (monitor_thread.joinable()) {
-            monitor_thread.join();
-        }
-    }
     return true;
 }
 
-double get_max_net_activity() {
-    std::lock_guard<std::mutex> guard(m);
-    return max_net_activity;
+NetworkMonitor::NetworkMonitor(const settings_t &settings)
+    : mSettings(settings)
+{
 }
+
+NetworkMonitor::~NetworkMonitor() {
+    if (mAbortFD >= 0) {
+        uint64_t v = 1;
+        write(mAbortFD, &v, sizeof(v));
+        if (mThread.joinable()) {
+            mThread.join();
+        }
+    }
+}
+
+network_status_t
+NetworkMonitor::getStatus() {
+    std::lock_guard<std::mutex> guard(mMutex);
+    return { .max_traffic_last_period = mLastMaxTraffic };
+}
+
+void
+NetworkMonitor::reset()
+{}

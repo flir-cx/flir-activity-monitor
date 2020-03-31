@@ -1,61 +1,52 @@
-#include "input_listener.hpp"
-#include <memory>
-#include <atomic>
-#include <thread>
-#include <mutex>
+#include "input_monitor.hpp"
 
 #include <unistd.h>
+#include <string.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <linux/input.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 
-#include <iostream>
-#include <stdio.h>
-#include <string.h>
-#include <fcntl.h>
-
 #include "utils.hpp"
 #include "log.hpp"
 
-namespace {
 
-struct events_dev {
-    int fd;
-    struct libevdev *dev;
-};
-
-input_event_data_t last_input_event_data;
-std::mutex m;
-std::thread listener_thread;
-
-int abortfd = -1;
-
+InputMonitor::InputMonitor(const settings_t &settings)
+    : mSettings(settings)
+{
 }
 
-int start_input_listener(const settings_t &settings) {
-    const int num_events = settings.input_event_devices.size();
+bool
+InputMonitor::start() {
+    struct events_dev {
+        int fd;
+        struct libevdev *dev;
+    };
+
+    const int num_events = mSettings.input_event_devices.size();
     auto devices = std::vector<struct events_dev>(num_events);
     int epollfd = epoll_create1(0);
     if (epollfd == -1) {
-        LOG_ERROR("epoll_create1: '%s' (%d)", strerror(errno), errno);
-        return -1;
+        LOG_ERROR("input_mon: epoll_create1: '%s' (%d)", strerror(errno), errno);
+        return false;
     }
 
     struct epoll_event ev;
-    abortfd = eventfd(0, 0);
+    mAbortFD = eventfd(0, 0);
     ev.events = EPOLLIN;
-    ev.data.fd = abortfd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, abortfd, &ev) == -1) {
-        LOG_ERROR("epoll_ctl: abort fd: '%s' (%d)", strerror(errno), errno);
+    ev.data.fd = mAbortFD;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, mAbortFD, &ev) == -1) {
+        LOG_ERROR("input_mon: epoll_ctl: abort fd: '%s' (%d)", strerror(errno), errno);
         return false;
     }
     /* create udev object */
     auto udev = udev_new();
     if (!udev) {
-        fprintf(stderr, "Can't create udev\n");
-        return 1;
+        fprintf(stderr, "input_mon: Can't create udev\n");
+        return false;
     }
 
     auto mon = udev_monitor_new_from_netlink(udev, "udev");
@@ -65,34 +56,34 @@ int start_input_listener(const settings_t &settings) {
     ev.events = EPOLLIN;
     ev.data.fd = udev_fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, udev_fd, &ev) == -1) {
-        LOG_ERROR("epoll_ctl: udev_fd: '%s' (%d)", strerror(errno), errno);
+        LOG_ERROR("input_mon: epoll_ctl: udev_fd: '%s' (%d)", strerror(errno), errno);
     }
 
 
     int i = 0;
-    for (const auto e: settings.input_event_devices) {
-        LOG_DEBUG("Adding input event: %s", e.c_str());
+    for (const auto e: mSettings.input_event_devices) {
+        LOG_DEBUG("input_mon: Adding input event: %s", e.c_str());
         int rc = 1;
         auto &dev = devices[i++];
         dev.fd = open(e.c_str(), O_RDONLY|O_NONBLOCK);
         rc = libevdev_new_from_fd(dev.fd, &dev.dev);
         if (rc < 0) {
-            LOG_ERROR("Failed to init libevdev (%s)\n", strerror(-rc));
-            return -1;
+            LOG_ERROR("input_mon: Failed to init libevdev (%s)\n", strerror(-rc));
+            return false;
         }
         struct epoll_event ev;
         ev.events = EPOLLIN;
         ev.data.fd = dev.fd;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, dev.fd, &ev) == -1) {
-            LOG_ERROR("epoll_ctl: adding event_device: '%s' (%d)", strerror(errno), errno);
-            return -1;
+            LOG_ERROR("input_mon: epoll_ctl: adding event_device: '%s' (%d)", strerror(errno), errno);
+            return false;
         }
 
     }
 
-    reset_last_input_event_data(settings);
+    reset();
 
-    listener_thread = std::thread([settings, udev_fd, epollfd, num_events, devices, mon] () {
+    mThread = std::thread([this, epollfd, udev_fd, num_events, devices, mon] () {
     int rc = 1;
     bool stop_thread = false;
     do {
@@ -105,19 +96,21 @@ int start_input_listener(const settings_t &settings) {
             continue;
         }
         if (nfds == -1) {
-            LOG_ERROR("epoll_wait: '%s' (%d)", strerror(errno), errno);
+            if (errno != EINTR) {
+                LOG_ERROR("input_mon: epoll_wait: '%s' (%d)", strerror(errno), errno);
+            }
             continue;
         }
 
         for (int n = 0; n < nfds; ++n) {
-            if (ep_events[n].data.fd == abortfd) {
+            if (ep_events[n].data.fd == mAbortFD) {
                 stop_thread = true;
                 break;
             }
             if (ep_events[n].data.fd == udev_fd) {
                 const auto ps = udev_monitor_receive_device(mon);
                 std::string device_name = udev_device_get_sysname(ps);
-                if (device_name == settings.charger_name) {
+                if (device_name == mSettings.charger_name) {
                     int online = atoi(udev_device_get_sysattr_value(ps, "online"));
                     charger_online = (online == 1);
                     charger_online_changed = true;
@@ -144,37 +137,38 @@ int start_input_listener(const settings_t &settings) {
 
         if (activity) {
             const auto timestamp = get_timestamp();
-            std::lock_guard<std::mutex> guard(m);
-            last_input_event_data.event_time = timestamp;
+            std::lock_guard<std::mutex> guard(mMutex);
+            mLastInputData.event_time = timestamp;
             if (charger_online_changed) {
-                last_input_event_data.charger_online = charger_online;
+                mLastInputData.charger_online = charger_online;
             }
         }
     } while (true);
     }
     );
 
-    return 0;
+    return true;
 }
 
-int stop_input_listener() {
-    if (abortfd >= 0) {
+InputMonitor::~InputMonitor() {
+    if (mAbortFD >= 0) {
         uint64_t v = 1;
-        write(abortfd, &v, sizeof(v));
-        if (listener_thread.joinable()) {
-            listener_thread.join();
+        write(mAbortFD, &v, sizeof(v));
+        if (mThread.joinable()) {
+            mThread.join();
         }
     }
-    return 0;
 }
 
-input_event_data_t get_last_input_event_data() {
-    std::lock_guard<std::mutex> guard(m);
-    return last_input_event_data;
+input_status_t
+InputMonitor::getStatus() {
+    std::lock_guard<std::mutex> guard(mMutex);
+    return mLastInputData;
 }
 
-void reset_last_input_event_data(const settings_t &settings) {
-    std::lock_guard<std::mutex> guard(m);
-    last_input_event_data.event_time = get_timestamp();
-    last_input_event_data.charger_online = get_charger_online(settings);
+void
+InputMonitor::reset() {
+    std::lock_guard<std::mutex> guard(mMutex);
+    mLastInputData.event_time = get_timestamp();
+    mLastInputData.charger_online = get_charger_online(mSettings);
 }

@@ -23,6 +23,7 @@ add_executable(fam_test
     main.cpp
     test_state_handler.cpp
     test_input_listener.cpp
+    test_rolling_window.cpp
     )
 target_link_libraries(fam_test
   PUBLIC

@@ -7,26 +7,22 @@
 #include "log.hpp"
 #include "state_handler.hpp"
 #include "settings_handler.hpp"
-#include "input_listener.hpp"
+#include "input_monitor.hpp"
 #include "network_monitor.hpp"
+#include "battery_monitor.hpp"
 #include "utils.hpp"
 
-
-activity_log_t get_activity_log(const settings_t &settings) {
-    activity_log_t activity = {
-        .last_input = get_last_input_event_data(),
-        .battery_voltage = get_battery_voltage(settings),
-        .battery_percentage = get_battery_percentage(settings),
-        .net_traffic_max = get_max_net_activity(),
+status_t get_status(InputMonitor &input, NetworkMonitor &net, BatteryMonitor &bat) {
+    status_t status {
+        .input = input.getStatus(),
+        .net = net.getStatus(),
+        .bat = bat.getStatus(),
     };
-    return activity;
+
+    return status;
 }
 
-void reset_activity_log(const settings_t &settings) {
-    reset_last_input_event_data(settings);
-}
-
-int handle_transition( const settings_t &settings,
+bool handle_transition( const settings_t &settings,
                        const state_t &old_state,
                        const state_t &new_state ) {
     if (new_state == old_state) {
@@ -38,18 +34,20 @@ int handle_transition( const settings_t &settings,
             LOG_INFO("Putting system to sleep using: '%s'",
                     settings.sleep_system_cmd.c_str());
             system(settings.sleep_system_cmd.c_str());
-            // returning from suspend
-            reset_activity_log(settings);
+            return true;
         }
     }
 
     if (new_state == state_t::SHUTDOWN) {
         if (!settings.shutdown_system_cmd.empty()) {
+            LOG_INFO("Shutting down system using: '%s'",
+                    settings.shutdown_system_cmd.c_str());
             system(settings.shutdown_system_cmd.c_str());
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 
 
@@ -85,10 +83,22 @@ int main(int argc, char *argv[]) {
         }
         const auto settings = settings_handler.getSettings();
 
-        if (start_input_listener(settings) < 0) {
+        InputMonitor input_mon(settings);
+        if (!input_mon.start()) {
+            LOG_ERROR("Failed to start input monitor.");
             return EXIT_FAILURE;
         }
-        if (start_network_monitor(settings) < 0) {
+
+        NetworkMonitor net_mon(settings);
+        if (!net_mon.start()) {
+            LOG_ERROR("Failed to start network monitor.");
+            return EXIT_FAILURE;
+        }
+
+        // Rolling window of 10 samples taken 3 seconds a part
+        BatteryMonitor bat_mon(settings, 10, 3000);
+        if (!bat_mon.start()) {
+            LOG_ERROR("Failed to start battery monitor.");
             return EXIT_FAILURE;
         }
 
@@ -119,29 +129,27 @@ int main(int argc, char *argv[]) {
                 break;
             }
 
-            const auto activity = get_activity_log(settings);
+            const auto status = get_status(input_mon, net_mon, bat_mon);
             const auto now = get_timestamp();
             const auto new_state = get_new_state(current_state,
                                                  settings,
-                                                 activity,
+                                                 status,
                                                  now);
 
             if (new_state != current_state) {
-                handle_transition(settings, current_state, new_state);
+                if (new_state == state_t::SHUTDOWN) {
+                    bat_mon.printData();
+                    usleep(100000); // Sleep to let log messages have time to print
+                }
+                const bool should_reset = handle_transition(settings, current_state, new_state);
                 current_state = new_state;
-            }
-
-            if ((count++ % 60) == 0) {
-                LOG_DEBUG("Charger: %s, Idle: %d s, v: %.2f, p: %f, n: %f",
-                        activity.last_input.charger_online ? "ONLINE": "OFFLINE",
-                        now - activity.last_input.event_time,
-                        activity.battery_voltage,
-                        activity.battery_percentage,
-                        activity.net_traffic_max);
+                if (should_reset) {
+                    input_mon.reset();
+                    net_mon.reset();
+                    bat_mon.reset();
+                }
             }
         } while (true);
-        stop_input_listener();
-        stop_network_monitor();
     } while (!stop_application);
 
 

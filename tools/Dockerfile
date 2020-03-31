@@ -4,6 +4,8 @@ RUN apt-get update \
  && apt-get install -y \
     pkg-config \
     libevdev-dev \
+    libsystemd-dev \
+        libudev-dev \
     cmake \
     make \
     gcc \
