@@ -1,5 +1,6 @@
 #include "settings_handler.hpp"
 
+#include <algorithm>
 #include <sstream>
 
 #include <systemd/sd-bus.h>
@@ -24,6 +25,7 @@ static int method_set_on_battery_idle_limit(sd_bus_message *m, void *userdata, s
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
     }
+    LOG_DEBUG("DBUS: Got on battery idle time: %d", idle_time);
     ss << idle_time;
     settings_handler->addDbusSetting(settings_field::INACT_ON_BAT_LIMIT, ss.str());
     // Trigger rereading of settings
@@ -52,6 +54,7 @@ static int method_set_on_charger_idle_limit(sd_bus_message *m, void *userdata, s
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
     }
+    LOG_DEBUG("DBUS: Got on charger idle time: %d", idle_time);
     ss << idle_time;
     settings_handler->addDbusSetting(settings_field::INACT_ON_CHARGER_LIMIT, ss.str());
     // Trigger rereading of settings
@@ -79,6 +82,7 @@ static int method_set_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_er
         LOG_ERROR("Failed to parse parameters: %s", strerror(-r));
         return r;
     }
+    LOG_DEBUG("DBUS: Got Sleep enabled: %d", enabled);
     settings_handler->addDbusSetting(settings_field::ENABLED_SLEEP, enabled?"true":"false");
     // Trigger rereading of settings
     kill(getpid(), SIGHUP);
@@ -273,6 +277,8 @@ SettingsHandler::generateSettings()
                 int limit = -1;
                 ss >> limit;
                 mSettings.inactive_on_battery_limit = limit;
+                LOG_INFO("Applying on battery limit from dbus: '%s', %d",
+                        f.second.c_str(), mSettings.inactive_on_battery_limit);
             }
             break;
 
@@ -282,6 +288,8 @@ SettingsHandler::generateSettings()
                 int limit = -1;
                 ss >> limit;
                 mSettings.inactive_on_charger_limit = limit;
+                LOG_INFO("Applying on charger limit from dbus: '%s', %d",
+                        f.second.c_str(), mSettings.inactive_on_charger_limit);
             }
             break;
 
@@ -291,10 +299,12 @@ SettingsHandler::generateSettings()
 //            case settings_field::CMD_SHUTDOWN:
             case settings_field::ENABLED_SLEEP:
             {
-                std::stringstream ss(f.second);
-                bool enabled = false;
-                ss >> enabled;
-                mSettings.sleep_enabled = enabled;
+                auto enabled = f.second;
+                std::transform(enabled.begin(), enabled.end(), enabled.begin(),
+                    [](unsigned char c){ return std::tolower(c); });
+                mSettings.sleep_enabled = (enabled == "true");
+                LOG_INFO("Applying enabled sleep setting from dbus: '%s', %d",
+                        f.second.c_str(), mSettings.sleep_enabled);
             }
             break;
 
