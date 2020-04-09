@@ -56,6 +56,7 @@ BatteryMonitor::~BatteryMonitor() {
         if (mThread.joinable()) {
             mThread.join();
         }
+        close(mAbortFD);
     }
 }
 
@@ -106,6 +107,9 @@ BatteryMonitor::start() {
             mBatteryVoltage.addValue(voltage);
             auto capacity = get_battery_capacity(mSettings);
             mBatteryCapacity.addValue(capacity);
+        }
+        if (epollfd >= 0) {
+            close(epollfd);
         }
     });
 

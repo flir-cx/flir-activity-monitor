@@ -114,7 +114,6 @@ static const sd_bus_vtable settings_vtable[] = {
 SettingsHandler::SettingsHandler()
 : mDefaultSettings{}
 , mSettings{}
-, mPollFD(-1)
 , mAbortFD(-1)
 {
     mDefaultSettings.input_event_devices = {
@@ -152,6 +151,7 @@ SettingsHandler::~SettingsHandler()
         if (mDbusThread.joinable()) {
             mDbusThread.join();
         }
+        close(mAbortFD);
     }
 }
 
@@ -201,19 +201,19 @@ SettingsHandler::startDbusThread() {
         return false;
     }
 
-    mPollFD = epoll_create1(0);
+    int epollfd = epoll_create1(0);
     struct epoll_event ev;
     mAbortFD = eventfd(0, 0);
     ev.events = EPOLLIN;
     ev.data.fd = mAbortFD;
-    if (epoll_ctl(mPollFD, EPOLL_CTL_ADD, mAbortFD, &ev) == -1) {
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, mAbortFD, &ev) == -1) {
         LOG_ERROR("settings: epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
         return false;
     }
     int bus_fd = sd_bus_get_fd(bus);
     ev.events = EPOLLIN;
     ev.data.fd = bus_fd;
-    if (epoll_ctl(mPollFD, EPOLL_CTL_ADD, bus_fd, &ev) == -1) {
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, bus_fd, &ev) == -1) {
         LOG_ERROR("settings: epoll_ctl: sd_bus fd: '%s' (%d)", strerror(errno), errno);
         return false;
     }
@@ -221,7 +221,7 @@ SettingsHandler::startDbusThread() {
     //sd_bus_get_timeout(bus, &wait_usec);
     //int wait = (wait_usec == uint64_t(-1))?-1:(wait_usec * 999)/1000;
 
-    mDbusThread = std::thread([bus, slot, abortfd = mAbortFD, epollfd = mPollFD]()
+    mDbusThread = std::thread([bus, slot, abortfd = mAbortFD, epollfd]()
     {
         bool stop_thread = false;
         for (;;) {
@@ -253,6 +253,9 @@ SettingsHandler::startDbusThread() {
         }
         sd_bus_slot_unref(slot);
         sd_bus_unref(bus);
+        if (epollfd >= 0) {
+            close(epollfd);
+        }
     });
 
     return true;

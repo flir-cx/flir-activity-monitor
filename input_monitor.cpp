@@ -83,7 +83,7 @@ InputMonitor::start() {
 
     reset();
 
-    mThread = std::thread([this, epollfd, udev_fd, num_events, devices, mon] () {
+    mThread = std::thread([this, epollfd, udev_fd, num_events, devices, udev, mon] () {
     int rc = 1;
     bool stop_thread = false;
     do {
@@ -144,6 +144,21 @@ InputMonitor::start() {
             }
         }
     } while (true);
+    if (epollfd >= 0) {
+        close(epollfd);
+    }
+    for (const auto dev: devices) {
+        if (dev.fd >= 0) {
+            close(dev.fd);
+        }
+    }
+    if (mon) {
+        udev_monitor_unref(mon);
+    }
+    if(udev) {
+        udev_unref(udev);
+    }
+
     }
     );
 
@@ -157,6 +172,7 @@ InputMonitor::~InputMonitor() {
         if (mThread.joinable()) {
             mThread.join();
         }
+        close(mAbortFD);
     }
 }
 

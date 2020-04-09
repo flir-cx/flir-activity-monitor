@@ -98,6 +98,9 @@ NetworkMonitor::start() {
         mLastMaxTraffic = double(max_net)/10;
 
     } while (true);
+    if (epollfd >= 0) {
+        close(epollfd);
+    }
     }
     );
 
@@ -116,6 +119,7 @@ NetworkMonitor::~NetworkMonitor() {
         if (mThread.joinable()) {
             mThread.join();
         }
+        close(mAbortFD);
     }
 }
 
