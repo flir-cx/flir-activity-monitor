@@ -30,7 +30,7 @@ std::vector<uint64_t> get_net_stat(const settings_t &settings, const std::string
         ss << "/sys/class/net/" << d << "/statistics/" << stats_file;
         std::ifstream f(ss.str());
         if (!f.is_open()) {
-            LOG_ERROR("Failed to open statistics: '%s'", ss.str().c_str());
+            //LOG_ERROR("Failed to open statistics: '%s'", ss.str().c_str());
             data[idx++] = 0;
         } else {
             uint64_t v;
