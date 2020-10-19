@@ -68,6 +68,7 @@ int main(int argc, char *argv[]) {
     SettingsHandler settings_handler;
 
     if (!settings_handler.startDbusThread()) {
+        LOG_ERROR("Failed to start Dbus thread.");
         return EXIT_FAILURE;
     }
 

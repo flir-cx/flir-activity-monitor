@@ -66,6 +66,10 @@ InputMonitor::start() {
         int rc = 1;
         auto &dev = devices[i++];
         dev.fd = open(e.c_str(), O_RDONLY|O_NONBLOCK);
+        if (dev.fd < 0) {
+            LOG_ERROR("input_mon: Failed to open '%s' (%s)\n", e.c_str(), strerror(errno));
+            return false;
+        }
         rc = libevdev_new_from_fd(dev.fd, &dev.dev);
         if (rc < 0) {
             LOG_ERROR("input_mon: Failed to init libevdev (%s)\n", strerror(-rc));
