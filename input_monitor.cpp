@@ -155,6 +155,9 @@ InputMonitor::start() {
         if (dev.fd >= 0) {
             close(dev.fd);
         }
+        if (dev.dev) {
+            libevdev_free(dev.dev);
+        }
     }
     if (mon) {
         udev_monitor_unref(mon);
