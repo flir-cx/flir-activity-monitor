@@ -3,9 +3,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-
 #include <cassert>
-
+#include <stdlib.h>
 
 namespace {
     log_level_t g_log_level = log_level_t::INFO;
@@ -73,6 +72,10 @@ void logger_log(log_level_t log_level, const char *fmt, ...) {
     }
 }
 
-
-
-
+// Log data-collection statistics
+void logger_stat(const char *eventid)
+{
+    char buff[256];
+    snprintf(buff, sizeof(buff), "/usr/bin/collect-statistics --event-id %s --field event-source=flir-activity-monitor --field event-type=info", eventid);
+    system(buff);
+}

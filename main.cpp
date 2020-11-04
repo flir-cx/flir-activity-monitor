@@ -140,7 +140,11 @@ int main(int argc, char *argv[]) {
             if (new_state != current_state) {
                 if (new_state == state_t::SHUTDOWN) {
                     bat_mon.printData();
+                    logger_stat("low-battery-shutdown");
                     usleep(100000); // Sleep to let log messages have time to print
+                }
+                else if (new_state == state_t::SLEEP) {
+                    logger_stat("auto-suspend");
                 }
                 const bool should_reset = handle_transition(settings, current_state, new_state);
                 current_state = new_state;

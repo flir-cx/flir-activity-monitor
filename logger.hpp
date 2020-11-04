@@ -18,4 +18,5 @@ typedef enum class log_type {
 
 void logger_setup(log_type_t type, log_level_t level);
 void logger_log(log_level_t log_level, const char *fmt, ...);
+void logger_stat(const char *eventid);
 
