@@ -2,6 +2,7 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <map>
 
 using timestamp_t = uint32_t;
 
@@ -48,4 +49,5 @@ typedef struct {
     std::string shutdown_system_cmd;
     std::string charger_name;
     std::string battery_name;
+    std::map<std::string, double> battery_voltage_limits;
 } settings_t;

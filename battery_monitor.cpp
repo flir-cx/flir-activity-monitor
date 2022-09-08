@@ -1,28 +1,20 @@
 #include "battery_monitor.hpp"
+#include "utils.hpp"
 
 #include <fstream>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <string.h>
+#include <string>
 
 #include "log.hpp"
 
 namespace {
-template<typename t>
-t get_value_from_file(const std::string &filename, t failed_value) {
-    std::ifstream f(filename);
-    if (!f.good()) {
-        return failed_value;
-    }
-    t value = failed_value;
-    f >> value;
-
-    return value;
-}
 
 double get_battery_voltage(const settings_t &settings) {
-    std::string voltage_file = "/sys/class/power_supply/";
+    // sysfs-links are setup on os to point to correct location
+    std::string voltage_file = "/etc/sysfs-links/";
     voltage_file += settings.battery_name;
     voltage_file += "/voltage_now";
     int voltage = get_value_from_file(voltage_file, -1000000);
@@ -30,13 +22,16 @@ double get_battery_voltage(const settings_t &settings) {
 }
 
 double get_battery_capacity(const settings_t &settings) {
-    std::string capacity_file = "/sys/class/power_supply/";
+    // sysfs-links are setup on os to point to correct location
+    std::string capacity_file = "/etc/sysfs-links/";
     capacity_file += settings.battery_name;
     capacity_file += "/capacity";
     int capacity = get_value_from_file(capacity_file, -1);
     return capacity;
 }
+
 }
+
 
 BatteryMonitor::BatteryMonitor(const settings_t settings,
                    size_t nbr_samples,
@@ -104,9 +99,16 @@ BatteryMonitor::start() {
                 break;
             }
             auto voltage = get_battery_voltage(mSettings);
-            mBatteryVoltage.addValue(voltage);
+            if (voltage >= 0)
+                mBatteryVoltage.addValue(voltage);
+            else
+                LOG_ERROR("get_battery_voltage failed");
+
             auto capacity = get_battery_capacity(mSettings);
-            mBatteryCapacity.addValue(capacity);
+            if (capacity >= 0)
+                mBatteryCapacity.addValue(capacity);
+            else
+                LOG_ERROR("get_battery_capacity failed");
         }
         if (epollfd >= 0) {
             close(epollfd);

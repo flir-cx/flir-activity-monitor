@@ -1,19 +1,7 @@
 #include "utils.hpp"
 #include <iostream>
 #include <fstream>
-
-template<typename t>
-t get_value_from_file(const std::string &filename, t failed_value) {
-    std::ifstream f(filename);
-    if (!f.good()) {
-        return failed_value;
-    }
-    t value = failed_value;
-    f >> value;
-
-    return value;
-}
-
+#include <string>
 
 timestamp_t get_timestamp() {
     using std::chrono::duration_cast;
@@ -28,7 +16,7 @@ timestamp_t get_timestamp() {
 }
 
 bool get_charger_online(const settings_t &settings) {
-    std::string charger_file = "/sys/class/power_supply/";
+    std::string charger_file = "/etc/sysfs-links/";
     charger_file += settings.charger_name;
     charger_file += "/online";
     int online = get_value_from_file(charger_file, -1);

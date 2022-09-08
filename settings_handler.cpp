@@ -1,7 +1,9 @@
 #include "settings_handler.hpp"
+#include "utils.hpp"
 
 #include <algorithm>
 #include <sstream>
+#include <string>
 
 #include <systemd/sd-bus.h>
 #include <string.h>
@@ -125,7 +127,7 @@ SettingsHandler::SettingsHandler()
     };
     mDefaultSettings.inactive_on_battery_limit = 0;
     mDefaultSettings.inactive_on_charger_limit = 0;
-    mDefaultSettings.battery_voltage_limit = 3.2;
+    mDefaultSettings.battery_voltage_limit = 0;
     mDefaultSettings.battery_capacity_limit = 5;
     mDefaultSettings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
     mDefaultSettings.net_activity_limit = 100;
@@ -136,9 +138,14 @@ SettingsHandler::SettingsHandler()
     };
     mDefaultSettings.sleep_system_cmd = "systemctl suspend";
     mDefaultSettings.shutdown_system_cmd = "systemctl poweroff";
-    mDefaultSettings.charger_name = "pf1550-charger";
+    mDefaultSettings.charger_name = "pmic_charger";
     mDefaultSettings.battery_name = "battery";
     mDefaultSettings.sleep_enabled = true;
+    mDefaultSettings.battery_voltage_limits = {
+        {"-evco", 2.7},
+        {"-leco", 2.5},
+        {"-ec201", 3.2},
+    };
 
     mSettings = mDefaultSettings;
 }
@@ -266,6 +273,7 @@ SettingsHandler::generateSettings()
 {
     LOG_DEBUG("Generating settings");
     std::lock_guard<std::mutex> l(mMutex);
+    setBatteryVoltageLimit();
     for (const auto &f :mDbusSettings) {
         switch (f.first) {
 //            case settings_field::BAT_MONITOR_MODE:
@@ -325,4 +333,21 @@ SettingsHandler::addDbusSetting(settings_field field, const std::string &content
     LOG_DEBUG("ADDING DBUS SETTING: %s", content.c_str());
     std::lock_guard<std::mutex> l(mMutex);
     mDbusSettings[field] = content;
+}
+
+void
+SettingsHandler::setBatteryVoltageLimit() {
+    std::string compatibility_file = "/proc/device-tree/compatible";
+    std::string compatibility = "unknown";
+    compatibility = get_value_from_file(compatibility_file, compatibility);
+
+    for (const auto& n : mDefaultSettings.battery_voltage_limits)
+    {
+        std::size_t found = compatibility.find(n.first);
+        if (found != std::string::npos)
+        {
+            mDefaultSettings.battery_voltage_limit = n.second;
+        }
+    }
+    LOG_DEBUG("Setting battery voltage limit: %f", mDefaultSettings.battery_voltage_limit);
 }
