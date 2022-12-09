@@ -27,6 +27,12 @@ InputMonitor::start() {
     };
 
     const int num_events = mSettings.input_event_devices.size();
+    if (num_events == 0)
+    {
+        LOG_ERROR("input_mon: no input event devices");
+        return false;
+    }
+
     auto devices = std::vector<struct events_dev>(num_events);
     int epollfd = epoll_create1(0);
     if (epollfd == -1) {

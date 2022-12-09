@@ -32,9 +32,10 @@ public:
     bool startDbusThread();
 
     void addDbusSetting(settings_field field, const std::string &content);
-    void setBatteryVoltageLimit();
 
 private:
+    void setBatteryVoltageLimit();
+    void setInputEventDevices();
 
     std::mutex mMutex;
     std::thread mDbusThread;

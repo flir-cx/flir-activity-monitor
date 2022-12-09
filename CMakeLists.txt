@@ -7,6 +7,8 @@ pkg_check_modules(FAM_DEPS REQUIRED libevdev libudev libsystemd)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
 set(FAM_SOURCES
     main.cpp
     state_handler.cpp

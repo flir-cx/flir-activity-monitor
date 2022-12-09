@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include <filesystem>
 
 #include <systemd/sd-bus.h>
 #include <string.h>
@@ -118,13 +119,7 @@ SettingsHandler::SettingsHandler()
 , mSettings{}
 , mAbortFD(-1)
 {
-    mDefaultSettings.input_event_devices = {
-        "/dev/input/event0",
-        "/dev/input/event1",
-        "/dev/input/event2",
-        "/dev/input/event3",
-        "/dev/input/event4",
-    };
+    mDefaultSettings.input_event_devices = {};
     mDefaultSettings.inactive_on_battery_limit = 0;
     mDefaultSettings.inactive_on_charger_limit = 0;
     mDefaultSettings.battery_voltage_limit = 0;
@@ -141,6 +136,7 @@ SettingsHandler::SettingsHandler()
     mDefaultSettings.charger_name = "pmic_charger";
     mDefaultSettings.battery_name = "battery";
     mDefaultSettings.sleep_enabled = true;
+    // Values defined in the respective camera model battery whitepapers
     mDefaultSettings.battery_voltage_limits = {
         {"-evco", 2.7},
         {"-leco", 2.5},
@@ -274,6 +270,7 @@ SettingsHandler::generateSettings()
     LOG_DEBUG("Generating settings");
     std::lock_guard<std::mutex> l(mMutex);
     setBatteryVoltageLimit();
+    setInputEventDevices();
     for (const auto &f :mDbusSettings) {
         switch (f.first) {
 //            case settings_field::BAT_MONITOR_MODE:
@@ -336,18 +333,36 @@ SettingsHandler::addDbusSetting(settings_field field, const std::string &content
 }
 
 void
-SettingsHandler::setBatteryVoltageLimit() {
+SettingsHandler::setBatteryVoltageLimit()
+{
+    // Set battery voltage limit depending on the camera model.
     std::string compatibility_file = "/proc/device-tree/compatible";
     std::string compatibility = "unknown";
     compatibility = get_value_from_file(compatibility_file, compatibility);
 
-    for (const auto& n : mDefaultSettings.battery_voltage_limits)
+    for (const auto& n : mSettings.battery_voltage_limits)
     {
         std::size_t found = compatibility.find(n.first);
         if (found != std::string::npos)
         {
-            mDefaultSettings.battery_voltage_limit = n.second;
+            mSettings.battery_voltage_limit = n.second;
         }
     }
-    LOG_DEBUG("Setting battery voltage limit: %f", mDefaultSettings.battery_voltage_limit);
+    LOG_DEBUG("Setting battery voltage limit: %f", mSettings.battery_voltage_limit);
+}
+
+void
+SettingsHandler::setInputEventDevices()
+{
+    // Find out all /dev/input/event* devices from filesystem, which will be monitored.
+    const std::filesystem::path dev_input{"/dev/input/"};
+    const std::string dev_input_event{"/dev/input/event"};
+    for (const auto& dir_entry : std::filesystem::directory_iterator{dev_input})
+    {
+        std::string path = dir_entry.path().string();
+        if (path.compare(0, dev_input_event.length(), dev_input_event) == 0)
+        {
+            mSettings.input_event_devices.push_back(path);
+        }
+    }
 }
