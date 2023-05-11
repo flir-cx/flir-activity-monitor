@@ -2,9 +2,11 @@
 #include "utils.hpp"
 
 #include <algorithm>
+#include <exception>
+#include <filesystem>
 #include <sstream>
 #include <string>
-#include <filesystem>
+#include <vector>
 
 #include <systemd/sd-bus.h>
 #include <string.h>
@@ -351,18 +353,38 @@ SettingsHandler::setBatteryVoltageLimit()
     LOG_DEBUG("Setting battery voltage limit: %f", mSettings.battery_voltage_limit);
 }
 
+// Helper function to setInputEventDevices(); lookup entries in dir, match entries using (absolute) prefix
+static std::vector<std::string> findInputEventDevicePaths(const std::string& dir, const std::string& prefix)
+{
+    const std::filesystem::path dir_path{dir};
+    std::vector<std::string> event_dev_paths;
+
+    try { // Catch error in case dir does not exist
+        for (const auto& dir_entry : std::filesystem::directory_iterator{dir_path}) {
+            std::string path = dir_entry.path().string();
+
+            // Return paths matching prefix (empty prefix ok) and file exists
+            if (path.compare(0, prefix.length(), prefix) != 0) {
+                continue;
+            } else if (!dir_entry.exists() || dir_entry.is_directory()) {
+                continue;
+            }
+
+            LOG_INFO("Found input event device %s", path.c_str());
+            event_dev_paths.push_back(path);
+        }
+    }
+    catch (const std::exception& e) {
+        LOG_ERROR("Lookup error for event devices, %s", e.what());
+    }
+
+    return event_dev_paths;
+}
+
 void
 SettingsHandler::setInputEventDevices()
 {
-    // Find out all /dev/input/event* devices from filesystem, which will be monitored.
-    const std::filesystem::path dev_input{"/dev/input/"};
-    const std::string dev_input_event{"/dev/input/event"};
-    for (const auto& dir_entry : std::filesystem::directory_iterator{dev_input})
-    {
-        std::string path = dir_entry.path().string();
-        if (path.compare(0, dev_input_event.length(), dev_input_event) == 0)
-        {
-            mSettings.input_event_devices.push_back(path);
-        }
-    }
+    // Find out all entries in /dev/input/by-path/*, which will be monitored
+    mSettings.input_event_devices =
+        findInputEventDevicePaths("/dev/input/by-path", "");
 }
