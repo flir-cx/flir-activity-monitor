@@ -124,7 +124,7 @@ SettingsHandler::SettingsHandler()
     mDefaultSettings.input_event_devices = {};
     mDefaultSettings.inactive_on_battery_limit = 0;
     mDefaultSettings.inactive_on_charger_limit = 0;
-    mDefaultSettings.battery_voltage_limit = 0;
+    mDefaultSettings.battery_voltage_limit = 3.2;
     mDefaultSettings.battery_capacity_limit = 5;
     mDefaultSettings.battery_monitor_mode = battery_monitor_mode_t::VOLTAGE;
     mDefaultSettings.net_activity_limit = 100;
@@ -143,6 +143,7 @@ SettingsHandler::SettingsHandler()
         {"-evco", 2.7},
         {"-leco", 2.5},
         {"-ec201", 3.2},
+        {"-ec302", 3.2},
     };
 
     mSettings = mDefaultSettings;
