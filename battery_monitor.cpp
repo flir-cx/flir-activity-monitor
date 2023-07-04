@@ -80,6 +80,8 @@ BatteryMonitor::start() {
     mThread = std::thread([this, epollfd] () mutable
     {
         bool stop_thread = false;
+        bool err_voltage = false;
+        bool err_capacity = false;
         for (;;) {
             struct epoll_event ep_events[1];
             int nfds = epoll_wait(epollfd, ep_events, 1, mSamplePeriod);
@@ -98,17 +100,35 @@ BatteryMonitor::start() {
             if (stop_thread) {
                 break;
             }
+
             auto voltage = get_battery_voltage(mSettings);
-            if (voltage >= 0)
+            if (voltage >= 0) {
                 mBatteryVoltage.addValue(voltage);
-            else
-                LOG_ERROR("get_battery_voltage failed");
+                if (err_voltage) {
+                    LOG_INFO("get_battery_voltage restored");
+                    err_voltage = false;
+                }
+            } else {
+                if (!err_voltage)
+                {
+                    err_voltage = true;
+                    LOG_WARNING("get_battery_voltage failed");
+                }
+            }
 
             auto capacity = get_battery_capacity(mSettings);
-            if (capacity >= 0)
+            if (capacity >= 0) {
                 mBatteryCapacity.addValue(capacity);
-            else
-                LOG_ERROR("get_battery_capacity failed");
+                if (err_capacity) {
+                    LOG_INFO("get_battery_capacity restored");
+                    err_capacity = false;
+                }
+            } else {
+                if (!err_capacity) {
+                    LOG_WARNING("get_battery_capacity failed, battery out?");
+                    err_capacity = true;
+                }
+            }
         }
         if (epollfd >= 0) {
             close(epollfd);
