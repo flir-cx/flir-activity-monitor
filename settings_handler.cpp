@@ -351,9 +351,39 @@ SettingsHandler::setBatteryVoltageLimit()
         if (found != std::string::npos)
         {
             mSettings.battery_voltage_limit = n.second;
+
+            /* If ec302 mainboard revision is above 4,
+             * we can lower shutdown voltage to improve
+             * battery life. */
+            if (n.first.find("ec302") != std::string::npos)
+            {
+				FILE* fd;
+				char rsp[4] = { 0 };
+				int mainboard_revision;
+
+				fd = popen("hexdump -s84 -n3 /sys/bus/i2c/devices/1-0057/eeprom -e '3/1 \"%c\"'", "r");
+				if (fd == NULL) 
+				{
+					LOG_ERROR("Unable to open process");
+					break;
+				}
+
+				if (fgets(rsp, 3, fd) == NULL)
+				{
+					LOG_ERROR("Failed to read from process");
+					pclose(fd);
+					break;
+				}
+
+				mainboard_revision = atoi(rsp);
+				if (mainboard_revision >= 4)
+					mSettings.battery_voltage_limit = 3.0;
+
+				pclose(fd);
+            }
         }
     }
-    LOG_DEBUG("Setting battery voltage limit: %f", mSettings.battery_voltage_limit);
+    LOG_INFO("Setting battery voltage limit: %f", mSettings.battery_voltage_limit);
 }
 
 // Helper function to setInputEventDevices(); lookup entries in dir, match entries using (absolute) prefix
