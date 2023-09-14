@@ -59,8 +59,9 @@ int main(int argc, char *argv[]) {
     sigaddset(&sigset, SIGTERM);
     sigaddset(&sigset, SIGQUIT);
     sigaddset(&sigset, SIGHUP);
+    sigaddset(&sigset, SIGUSR1);
     sigprocmask(SIG_BLOCK, &sigset, NULL);
-
+    status_t status;
     const int signal_fd = signalfd(-1, &sigset, 0);
 
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
@@ -75,6 +76,7 @@ int main(int argc, char *argv[]) {
     state_t current_state = state_t::ACTIVE;
 
     int count = 0;
+    int force_poweroff_state = 0;
     bool stop_application = false;
 
     do {
@@ -118,6 +120,9 @@ int main(int argc, char *argv[]) {
                 case SIGQUIT:
                     stop_application = true;
                     break;
+                case SIGUSR1:
+                    status.force_poweroff_state = true;
+                    break;
                 default:
                     // Will break inner loop and reinitialize.
                     break;
@@ -130,7 +135,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
 
-            const auto status = get_status(input_mon, net_mon, bat_mon);
+            status = get_status(input_mon, net_mon, bat_mon);
             const auto now = get_timestamp();
             const auto new_state = get_new_state(current_state,
                                                  settings,

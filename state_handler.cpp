@@ -9,9 +9,12 @@
 state_t get_new_state(const state_t current_state,
         const settings_t &settings,
         const status_t &status,
-        const timestamp_t &now) {
+        const timestamp_t &now)
+{
+  if (status.force_poweroff_state)
+        return state_t::SHUTDOWN;
 
-    if (settings.battery_monitor_mode == battery_monitor_mode_t::BOTH ||
+  if (settings.battery_monitor_mode == battery_monitor_mode_t::BOTH ||
         settings.battery_monitor_mode == battery_monitor_mode_t::VOLTAGE) {
         if (status.bat.valid && status.bat.voltage_below_limit) {
             LOG_WARNING("Battery voltage level lower than: %.2f V, will perform shutdown command.",

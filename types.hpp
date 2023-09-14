@@ -25,6 +25,7 @@ typedef struct {
     input_status_t input;
     network_status_t net;
     battery_status_t bat;
+    bool force_poweroff_state;
 } status_t;
 
 
