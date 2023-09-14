@@ -47,6 +47,7 @@ typedef struct {
     int inactive_on_charger_limit;
     bool sleep_enabled;
     std::string sleep_system_cmd;
+    std::string shutdown_flirapp_cmd;
     std::string shutdown_system_cmd;
     std::string charger_name;
     std::string battery_name;

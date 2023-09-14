@@ -40,8 +40,10 @@ bool handle_transition( const settings_t &settings,
 
     if (new_state == state_t::SHUTDOWN) {
         if (!settings.shutdown_system_cmd.empty()) {
-            LOG_INFO("Shutting down system using: '%s'",
+            LOG_INFO("Shutting down system using: '%s' and '%s'",
+                    settings.shutdown_flirapp_cmd.c_str(),
                     settings.shutdown_system_cmd.c_str());
+            system(settings.shutdown_flirapp_cmd.c_str());
             system(settings.shutdown_system_cmd.c_str());
             return true;
         }

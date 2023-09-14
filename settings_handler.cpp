@@ -134,6 +134,7 @@ SettingsHandler::SettingsHandler()
         "p2p0",
     };
     mDefaultSettings.sleep_system_cmd = "systemctl suspend";
+    mDefaultSettings.shutdown_flirapp_cmd = "systemctl stop flirapp";
     mDefaultSettings.shutdown_system_cmd = "systemctl poweroff";
     mDefaultSettings.charger_name = "pmic_charger";
     mDefaultSettings.battery_name = "battery";
