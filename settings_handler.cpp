@@ -356,7 +356,7 @@ SettingsHandler::setBatteryVoltageLimit()
 }
 
 // Helper function to setInputEventDevices(); lookup entries in dir, match entries using (absolute) prefix
-static std::vector<std::string> findInputEventDevicePaths(const std::string& dir, const std::string& prefix)
+static std::vector<std::string> findInputEventDevicePaths(const std::string& dir, const std::string& acceptpattern)
 {
     const std::filesystem::path dir_path{dir};
     std::vector<std::string> event_dev_paths;
@@ -364,11 +364,12 @@ static std::vector<std::string> findInputEventDevicePaths(const std::string& dir
     try { // Catch error in case dir does not exist
         for (const auto& dir_entry : std::filesystem::directory_iterator{dir_path}) {
             std::string path = dir_entry.path().string();
-
-            // Return paths matching prefix (empty prefix ok) and file exists
-            if (path.compare(0, prefix.length(), prefix) != 0) {
+            // Return paths containing acceptpattern (empty pattern ok) and file exists
+            if (acceptpattern.length() > 0 &&
+                path.find(acceptpattern) == std::string::npos) {
                 continue;
-            } else if (!dir_entry.exists() || dir_entry.is_directory()) {
+            }
+            else if (!dir_entry.exists() || dir_entry.is_directory()) {
                 continue;
             }
 
@@ -386,7 +387,19 @@ static std::vector<std::string> findInputEventDevicePaths(const std::string& dir
 void
 SettingsHandler::setInputEventDevices()
 {
-    // Find out all entries in /dev/input/by-path/*, which will be monitored
+    std::vector<std::string> touch_devices;
+    // Find out all keyboard devices in /dev/input/by-path/*,
+    // which will be monitored
+
     mSettings.input_event_devices =
-        findInputEventDevicePaths("/dev/input/by-path", "");
+        findInputEventDevicePaths("/dev/input/by-path", "key");
+
+    // Add touchscreen device to monitored input devices
+    // this event device is not always present in "by-path" (hw dependent),
+    // definitely not named "touch" in "by-path"
+    // always a symlink "touchscreen0" directly below /dev/input/ 
+    touch_devices = findInputEventDevicePaths("/dev/input", "touch");
+    for (const auto e : touch_devices) {
+        mSettings.input_event_devices.push_back(e);
+    }
 }
