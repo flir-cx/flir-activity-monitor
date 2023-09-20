@@ -42,6 +42,7 @@ typedef struct {
     double battery_capacity_limit;
     double net_activity_limit;
     std::vector<std::string> input_event_devices;
+    std::vector<std::string> pollonly_event_devices;
     std::vector<std::string> net_devices;
     int inactive_on_battery_limit;
     int inactive_on_charger_limit;

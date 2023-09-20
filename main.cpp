@@ -67,6 +67,7 @@ int main(int argc, char *argv[]) {
     const int signal_fd = signalfd(-1, &sigset, 0);
 
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
+    // logger_setup(log_type_t::PRINTF, log_level_t::DEBUG);
 
     SettingsHandler settings_handler;
 

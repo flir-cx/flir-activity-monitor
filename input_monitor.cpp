@@ -24,9 +24,11 @@ InputMonitor::start() {
     struct events_dev {
         int fd;
         struct libevdev *dev;
+        bool monitored;
     };
 
-    const int num_events = mSettings.input_event_devices.size();
+    const int num_events = mSettings.input_event_devices.size() +
+        mSettings.pollonly_event_devices.size();
     if (num_events == 0)
     {
         LOG_ERROR("input_mon: no input event devices");
@@ -68,7 +70,7 @@ InputMonitor::start() {
 
     int i = 0;
     for (const auto e: mSettings.input_event_devices) {
-        LOG_DEBUG("input_mon: Adding input event: %s", e.c_str());
+        LOG_INFO("input_mon: Adding input event: %s", e.c_str());
         int rc = 1;
         auto &dev = devices[i++];
         dev.fd = open(e.c_str(), O_RDONLY|O_NONBLOCK);
@@ -89,8 +91,36 @@ InputMonitor::start() {
             return false;
         }
 
+        // input_event_devices should be considered as activity
+        dev.monitored = true;
     }
 
+    for (const auto e: mSettings.pollonly_event_devices) {
+        LOG_INFO("input_mon: Adding pollonly event: %s", e.c_str());
+        int rc = 1;
+        auto &dev = devices[i++];
+        dev.fd = open(e.c_str(), O_RDONLY|O_NONBLOCK);
+        if (dev.fd < 0) {
+            LOG_ERROR("input_mon: Failed to open '%s' (%s)\n", e.c_str(), strerror(errno));
+            return false;
+        }
+        rc = libevdev_new_from_fd(dev.fd, &dev.dev);
+        if (rc < 0) {
+            LOG_ERROR("input_mon: Failed to init libevdev (%s)\n", strerror(-rc));
+            return false;
+        }
+        struct epoll_event ev;
+        ev.events = EPOLLIN;
+        ev.data.fd = dev.fd;
+        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, dev.fd, &ev) == -1) {
+            LOG_ERROR("input_mon: epoll_ctl: adding event_device: '%s' (%d)", strerror(errno), errno);
+            return false;
+        }
+
+        // pollonly_event_devices should not count as activity
+        dev.monitored = false;
+    }
+    
     reset();
 
     mThread = std::thread([this, epollfd, udev_fd, num_events, devices, udev, mon] () {
@@ -131,8 +161,11 @@ InputMonitor::start() {
             }
             for (const auto dev: devices) {
                 if (dev.fd == ep_events[n].data.fd) {
-                    LOG_DEBUG("Got input event on: %d", ep_events[n].data.fd);
-                    activity = true;
+                    LOG_DEBUG("Got input event on: %d, monitored:%d",
+                              ep_events[n].data.fd, dev.monitored);
+                    if (dev.monitored)
+                        activity = true;
+
                     struct input_event ev;
                     while((rc = libevdev_next_event(dev.dev, LIBEVDEV_READ_FLAG_NORMAL, &ev)) == 0) {
                         // Empty evdev events for device.

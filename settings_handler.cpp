@@ -122,6 +122,7 @@ SettingsHandler::SettingsHandler()
 , mAbortFD(-1)
 {
     mDefaultSettings.input_event_devices = {};
+    mDefaultSettings.pollonly_event_devices = {};
     mDefaultSettings.inactive_on_battery_limit = 0;
     mDefaultSettings.inactive_on_charger_limit = 0;
     mDefaultSettings.battery_voltage_limit = 3.2;
@@ -402,4 +403,8 @@ SettingsHandler::setInputEventDevices()
     for (const auto e : touch_devices) {
         mSettings.input_event_devices.push_back(e);
     }
+
+    // For compatibility, create a pollonly device list
+    mSettings.pollonly_event_devices =
+        findInputEventDevicePaths("/dev/input/by-path", "8000.i2c-event");
 }
