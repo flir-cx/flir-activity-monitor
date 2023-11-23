@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
+#include <fcntl.h>
+#include <linux/input.h>
 
 #include "log.hpp"
 
@@ -386,6 +388,62 @@ SettingsHandler::setBatteryVoltageLimit()
     LOG_INFO("Setting battery voltage limit: %f", mSettings.battery_voltage_limit);
 }
 
+// Helper function to setInputEventDevices(); lookup entries in dir
+// probe name of event device and return list that matches pattern in driver name
+static std::vector<std::string>
+findInputEventDeviceNameMatch(const std::string &dir,
+                              const std::string &acceptpattern)
+{
+    const std::filesystem::path dir_path{dir};
+    std::vector<std::string> event_dev_paths;
+    char buf[256];
+    int fd;
+    int rval;
+    std::string cppbuf;
+
+    if (acceptpattern.length() == 0)
+        // no pattern
+        return event_dev_paths;
+
+    try { // Catch error in case dir does not exist
+        for (const auto& dir_entry : std::filesystem::directory_iterator{dir_path}) {
+            std::string path = dir_entry.path().string();
+            // Return paths containing acceptpattern (empty pattern ok) and file exists
+            if (!dir_entry.exists() || dir_entry.is_directory() ||
+                dir_entry.is_symlink()) {
+                continue;
+            }
+
+            fd = open(path.c_str(), O_RDONLY);
+            if (fd < 0) {
+                LOG_INFO("could not open %s", path.c_str());
+                continue;
+            }
+            // get device name out of input device
+            rval = ioctl(fd, EVIOCGNAME(sizeof(buf)), buf);
+            close(fd);
+            if (rval < 0) {
+                // unexpected error in ioctl - skip this node
+                LOG_INFO("ioctl error for %d", path.c_str());
+                continue;
+            }
+            cppbuf = buf;  // convert to cpp string
+            LOG_INFO("Found input event device %s, name: %s", path.c_str(), cppbuf.c_str());
+            if (cppbuf.find(acceptpattern) ==  std::string::npos)
+                // not matching acceptpattern
+                continue;
+
+            LOG_INFO("Accepted input event match device %s, name: %s", path.c_str(), buf);
+            event_dev_paths.push_back(path);
+        }
+    }
+    catch (const std::exception& e) {
+        LOG_ERROR("Lookup error for event devices, %s", e.what());
+    }
+
+    return event_dev_paths;
+}
+
 // Helper function to setInputEventDevices(); lookup entries in dir, match entries using (absolute) prefix
 static std::vector<std::string> findInputEventDevicePaths(const std::string& dir, const std::string& acceptpattern)
 {
@@ -436,5 +494,5 @@ SettingsHandler::setInputEventDevices()
 
     // For compatibility, create a pollonly device list
     mSettings.pollonly_event_devices =
-        findInputEventDevicePaths("/dev/input/by-path", "8000.i2c-event");
+        findInputEventDeviceNameMatch("/dev/input", "accel");
 }
