@@ -22,9 +22,15 @@ typedef struct {
 } battery_status_t;
 
 typedef struct {
+    bool online;
+    timestamp_t lastconnected_time;
+} cable_status_t;
+
+typedef struct {
     input_status_t input;
     network_status_t net;
     battery_status_t bat;
+    cable_status_t cable;
     bool force_poweroff_state;
 } status_t;
 
@@ -41,6 +47,7 @@ typedef struct {
     double battery_voltage_limit;
     double battery_capacity_limit;
     double net_activity_limit;
+    int no_cable_secs;
     std::vector<std::string> input_event_devices;
     std::vector<std::string> pollonly_event_devices;
     std::vector<std::string> net_devices;

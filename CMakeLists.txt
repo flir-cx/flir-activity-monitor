@@ -16,6 +16,7 @@ set(FAM_SOURCES
     input_monitor.cpp
     network_monitor.cpp
     battery_monitor.cpp
+    cable_monitor.cpp
     utils.cpp
     logger.cpp
     )

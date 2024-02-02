@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <string.h>
 
+#include "cable_monitor.hpp"
 #include "log.hpp"
 #include "state_handler.hpp"
 #include "settings_handler.hpp"
@@ -12,11 +13,12 @@
 #include "battery_monitor.hpp"
 #include "utils.hpp"
 
-status_t get_status(InputMonitor &input, NetworkMonitor &net, BatteryMonitor &bat) {
+status_t get_status(InputMonitor &input, NetworkMonitor &net, BatteryMonitor &bat, CableMonitor &cable) {
     status_t status {
         .input = input.getStatus(),
         .net = net.getStatus(),
         .bat = bat.getStatus(),
+        .cable = cable.getStatus()
     };
 
     return status;
@@ -108,6 +110,8 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
 
+        CableMonitor cable_mon(settings);
+        
         do {
             struct pollfd fd = {.fd = signal_fd, .events = POLL_IN, .revents = 0};
             int r = poll(&fd, 1, 1000);
@@ -138,7 +142,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
 
-            status = get_status(input_mon, net_mon, bat_mon);
+            status = get_status(input_mon, net_mon, bat_mon, cable_mon);
             const auto now = get_timestamp();
             const auto new_state = get_new_state(current_state,
                                                  settings,

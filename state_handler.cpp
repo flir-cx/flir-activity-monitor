@@ -32,17 +32,27 @@ state_t get_new_state(const state_t current_state,
         }
     }
 
-    if (settings.sleep_enabled && status.net.max_traffic_last_period < settings.net_activity_limit &&
-            ((!status.input.charger_online && settings.inactive_on_battery_limit > 0 &&
-             now > (status.input.event_time + settings.inactive_on_battery_limit)) ||
-             (status.input.charger_online && settings.inactive_on_charger_limit > 0 &&
-              now > (status.input.event_time + settings.inactive_on_charger_limit)))) {
-        LOG_NOTICE("System is inactive: (inactivity time: %d seconds, net activity: %f, charger: %d), will perform sleep command.",
-                (now - status.input.event_time),
-                status.net.max_traffic_last_period,
-                status.input.charger_online);
-        return state_t::SLEEP;
-    }
+    if (settings.sleep_enabled)
+    {
+        bool bLownet = (status.net.max_traffic_last_period < settings.net_activity_limit);
+        bool bNoInput = ((!status.input.charger_online &&
+                        settings.inactive_on_battery_limit > 0 &&
+                        now > (status.input.event_time + settings.inactive_on_battery_limit)) ||
+                       (status.input.charger_online && settings.inactive_on_charger_limit > 0 &&
+                        now > (status.input.event_time + settings.inactive_on_charger_limit)
+                        ));
+        bool bNoCable = (now > (status.cable.lastconnected_time  + settings.no_cable_secs));
 
+        // LOG_DEBUG("status bLowNet:%d bNoInput:%d bNoCable:%d", bLownet, bNoInput, bNoCable);
+        
+        if (bLownet && bNoInput && bNoCable)
+        {
+            LOG_NOTICE("System is inactive: (inactivity time: %d seconds, net activity: %f, charger: %d), will perform sleep command.",
+                       (now - status.input.event_time),
+                       status.net.max_traffic_last_period,
+                       status.input.charger_online);
+            return state_t::SLEEP;
+        }
+    }
     return state_t::ACTIVE;
 }
