@@ -429,12 +429,12 @@ findInputEventDeviceNameMatch(const std::string &dir,
                 continue;
             }
             cppbuf = buf;  // convert to cpp string
-            LOG_INFO("Found input event device %s, name: %s", path.c_str(), cppbuf.c_str());
+            LOG_DEBUG("Found input event device %s, name: %s", path.c_str(), cppbuf.c_str());
             if (cppbuf.find(acceptpattern) ==  std::string::npos)
                 // not matching acceptpattern
                 continue;
 
-            LOG_INFO("Accepted input event match device %s, name: %s", path.c_str(), buf);
+            LOG_DEBUG("Accepted input event match device %s, name: %s", path.c_str(), buf);
             event_dev_paths.push_back(path);
         }
     }
@@ -463,7 +463,7 @@ static std::vector<std::string> findInputEventDevicePaths(const std::string& dir
                 continue;
             }
 
-            LOG_INFO("Found input event device %s", path.c_str());
+            LOG_DEBUG("Found input event device %s", path.c_str());
             event_dev_paths.push_back(path);
         }
     }

@@ -51,7 +51,7 @@ CableMonitor::getStatus() {
         mLastConnected_time = get_timestamp();
     if (curstate != mLastState)
     {
-        LOG_DEBUG("CableMonitor - new connectedState:%d", curstate);
+        LOG_INFO("CableMonitor - new connectedState:%d", curstate);
         mLastState = curstate;
     }
     return {
