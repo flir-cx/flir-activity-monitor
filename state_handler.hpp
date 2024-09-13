@@ -5,6 +5,7 @@ typedef enum class state {
     ACTIVE,
     SLEEP,
     SHUTDOWN,
+    ALERT,
 } state_t;
 
 state_t get_new_state(const state_t current_state,

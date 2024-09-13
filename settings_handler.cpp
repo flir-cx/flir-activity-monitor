@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <systemd/sd-bus.h>
+#include <systemd/sd-bus-vtable.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -18,6 +19,10 @@
 #include <linux/input.h>
 
 #include "log.hpp"
+
+static const char* object_path { "/com/flir/activitymonitor" };
+static const char* interface_name { "com.flir.activitymonitor" };
+static const char* alert_signal_name { "AlertOffTime" };
 
 namespace {
 
@@ -79,6 +84,11 @@ static int method_get_on_charger_idle_limit(sd_bus_message *m, void *userdata, s
     return sd_bus_reply_method_return(m, "i", settings.inactive_on_charger_limit);
 }
 
+static int method_get_remaining_idle_time(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
+    auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
+    return sd_bus_reply_method_return(m, "i", settings_handler->getRemainingIdleTime());
+}
+
 static int method_set_sleep_enabled(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
     int32_t enabled;
     auto settings_handler = reinterpret_cast<SettingsHandler *>(userdata);
@@ -112,16 +122,20 @@ static const sd_bus_vtable settings_vtable[] = {
     SD_BUS_METHOD("GetOnBatteryTimeToSleep", nullptr, "i", method_get_on_battery_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("SetOnACTimeToSleep", "i", nullptr, method_set_on_charger_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("GetOnACTimeToSleep", nullptr, "i", method_get_on_charger_idle_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD("GetRemainingToSleep", nullptr, "i", method_get_remaining_idle_time, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("SetSleepEnabled", "b", nullptr, method_set_sleep_enabled, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("GetSleepEnabled", nullptr, "b", method_get_sleep_enabled, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_SIGNAL_WITH_ARGS(alert_signal_name, SD_BUS_ARGS("b", alert), 0),
     SD_BUS_VTABLE_END
 };
 };
 
 SettingsHandler::SettingsHandler()
-: mDefaultSettings{}
+: mBus{nullptr}
+, mDefaultSettings{}
 , mSettings{}
 , mAbortFD(-1)
+, mRemainingIdleTime{0}
 {
     mDefaultSettings.input_event_devices = {};
     mDefaultSettings.pollonly_event_devices = {};
@@ -182,6 +196,7 @@ SettingsHandler::startDbusThread() {
     int r;
 
     r = sd_bus_open_system(&bus);
+    mBus = bus;
     if (r < 0) {
         LOG_ERROR("settings: Failed to connect to system bus: %s", strerror(-r));
         sd_bus_unref(bus);
@@ -191,8 +206,8 @@ SettingsHandler::startDbusThread() {
     /* Install the object */
     r = sd_bus_add_object_vtable(bus,
             &slot,
-            "/com/flir/activitymonitor",  /* object path */
-            "com.flir.activitymonitor",   /* interface name */
+            object_path,
+            interface_name,
             settings_vtable,
             this);
 
@@ -204,7 +219,7 @@ SettingsHandler::startDbusThread() {
     }
 
     /* Take a well-known service name so that clients can find us */
-    r = sd_bus_request_name(bus, "com.flir.activitymonitor", 0);
+    r = sd_bus_request_name(bus, interface_name, 0);
     if (r < 0) {
         LOG_ERROR("settings: Failed to acquire service name: %s", strerror(-r));
         sd_bus_slot_unref(slot);
@@ -496,4 +511,17 @@ SettingsHandler::setInputEventDevices()
     // For compatibility, create a pollonly device list
     mSettings.pollonly_event_devices =
         findInputEventDeviceNameMatch("/dev/input", "accel");
+}
+
+void SettingsHandler::sendAlertSignal(bool alert)
+{
+    sd_bus_emit_signal(mBus, object_path, interface_name, alert_signal_name, "b", static_cast<int>(alert));
+}
+
+void SettingsHandler::setRemainingIdleTime(const input_status_t& inputStatus, const timestamp_t now) {
+    const auto settings = getSettings();
+    const auto inputLimit = inputStatus.charger_online ? 
+        settings.inactive_on_charger_limit : settings.inactive_on_battery_limit;
+    mRemainingIdleTime = inputLimit > 0 ?
+        std::max(1, static_cast<signed>(inputStatus.event_time + inputLimit - now)) : 0;
 }

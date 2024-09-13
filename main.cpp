@@ -13,7 +13,9 @@
 #include "battery_monitor.hpp"
 #include "utils.hpp"
 
-status_t get_status(InputMonitor &input, NetworkMonitor &net, BatteryMonitor &bat, CableMonitor &cable) {
+static SettingsHandler settings_handler;
+
+static status_t get_status(InputMonitor &input, NetworkMonitor &net, BatteryMonitor &bat, CableMonitor &cable) {
     status_t status {
         .input = input.getStatus(),
         .net = net.getStatus(),
@@ -24,11 +26,22 @@ status_t get_status(InputMonitor &input, NetworkMonitor &net, BatteryMonitor &ba
     return status;
 }
 
-bool handle_transition( const settings_t &settings,
+//handle_transition returns true if monitoring shall be reset
+static bool handle_transition( const settings_t &settings,
                        const state_t &old_state,
                        const state_t &new_state ) {
     if (new_state == old_state) {
-        return 0;
+        return false;
+    }
+
+    if (old_state == state_t::ALERT) {
+        settings_handler.sendAlertSignal(false);
+        //intentionally not returning here
+    }
+
+    if (new_state == state_t::ALERT) {
+        settings_handler.sendAlertSignal(true);
+        return false;
     }
 
     if (new_state == state_t::SLEEP) {
@@ -71,14 +84,13 @@ int main(int argc, char *argv[]) {
     logger_setup(log_type_t::SYSLOG, log_level_t::INFO);
     // logger_setup(log_type_t::PRINTF, log_level_t::DEBUG);
 
-    SettingsHandler settings_handler;
-
     if (!settings_handler.startDbusThread()) {
         LOG_ERROR("Failed to start Dbus thread.");
         return EXIT_FAILURE;
     }
 
     state_t current_state = state_t::ACTIVE;
+    settings_handler.sendAlertSignal(false);
 
     int count = 0;
     int force_poweroff_state = 0;
@@ -144,6 +156,7 @@ int main(int argc, char *argv[]) {
 
             status = get_status(input_mon, net_mon, bat_mon, cable_mon);
             const auto now = get_timestamp();
+            settings_handler.setRemainingIdleTime(status.input, now);
             const auto new_state = get_new_state(current_state,
                                                  settings,
                                                  status,
