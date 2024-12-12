@@ -150,13 +150,17 @@ InputMonitor::start() {
             if (ep_events[n].data.fd == udev_fd) {
                 const auto ps = udev_monitor_receive_device(mon);
                 std::string device_name = udev_device_get_sysname(ps);
-                if (device_name == mSettings.charger_name) {
-                    int online = atoi(udev_device_get_sysattr_value(ps, "online"));
-                    charger_online = (online == 1);
-                    charger_online_changed = true;
-                    // online state of power supply counts as activity as well
-                    activity = true;
-                    LOG_DEBUG("Power supply is %s.\n", charger_online?"ONLINE":"OFFLINE");
+                LOG_DEBUG("udev device changed, name=%s", device_name.c_str());
+
+                // Read new state from file in settings, sym-link does not match udev device name
+                // and other power-supply devs may exist. Always check for an actual change.
+                charger_online = get_charger_online(mSettings);
+
+                // online state changes of power supply counts as activity as well
+                charger_online_changed |= (charger_online != mLastInputData.charger_online);
+                activity |= charger_online_changed;
+                if (charger_online_changed) {
+                    LOG_DEBUG("Power supply is %s.", charger_online ? "ONLINE" : "OFFLINE");
                 }
             }
             for (const auto dev: devices) {
