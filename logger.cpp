@@ -76,6 +76,6 @@ void logger_log(log_level_t log_level, const char *fmt, ...) {
 void logger_stat(const char *eventid)
 {
     char buff[256];
-    snprintf(buff, sizeof(buff), "/usr/bin/collect-statistics --event-id %s --field event-source=flir-activity-monitor --field event-type=info", eventid);
+    snprintf(buff, sizeof(buff), "/FLIR/usr/bin/collect-statistics --event-id %s --field event-source=flir-activity-monitor --field event-type=info", eventid);
     system(buff);
 }
